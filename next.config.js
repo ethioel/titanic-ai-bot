@@ -1,11 +1,4 @@
 /** @type {import('next').NextConfig} */
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-});
-
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
@@ -47,9 +40,6 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
-    NEXT_PUBLIC_ENABLE_SIMULATION: process.env.ENABLE_SIMULATION || 'true',
-    NEXT_PUBLIC_ENABLE_SHAP: process.env.ENABLE_SHAP || 'true',
-    NEXT_PUBLIC_ENABLE_TWIN: process.env.ENABLE_TWIN_MATCHING || 'true',
   },
   i18n: {
     locales: ['en'],
@@ -60,4 +50,4 @@ const nextConfig = {
   trailingSlash: false,
 };
 
-module.exports = withPWA(nextConfig);
+module.exports = nextConfig;
