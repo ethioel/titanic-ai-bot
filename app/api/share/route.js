@@ -1,24 +1,6 @@
+// app/api/share/route.js
+
 import { NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
-import { join } from 'path';
-
-// Dynamic import for canvas (to avoid build failures if not installed)
-let canvasLoaded = false;
-let createCanvas, loadImage;
-
-async function loadCanvas() {
-  if (canvasLoaded) return true;
-  try {
-    const canvasModule = await import('canvas');
-    createCanvas = canvasModule.createCanvas;
-    loadImage = canvasModule.loadImage;
-    canvasLoaded = true;
-    return true;
-  } catch (e) {
-    console.warn('Canvas module not available:', e.message);
-    return false;
-  }
-}
 
 export async function POST(request) {
   try {
@@ -31,35 +13,27 @@ export async function POST(request) {
       sex = 'male',
       age = 30,
       twin_name = null,
-      timestamp = new Date().toISOString()
+      timestamp = new Date().toISOString(),
     } = body;
 
-    // Check if canvas is available
-    const canvasReady = await loadCanvas();
-    if (!canvasReady || !createCanvas) {
-      // Fallback: return share data without image
-      const shareId = generateShareId();
-      const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'}/share/${shareId}`;
-      
+    // Try to load canvas dynamically
+    let canvas;
+    try {
+      canvas = await import('canvas');
+    } catch (e) {
+      // Canvas not available – return data without image
       return NextResponse.json({
-        share_id: shareId,
-        share_url: shareUrl,
-        image: null,
-        message: 'Image generation not available (canvas module missing)',
-        data: {
-          passenger_name,
-          survival_probability,
-          survived,
-          passenger_class,
-          sex,
-          age,
-          twin_name,
-          timestamp
-        }
-      });
+        error: 'Image generation unavailable',
+        message: 'Canvas module not installed in this environment',
+        share_id: generateShareId(),
+        share_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'}/share/${generateShareId()}`,
+        data: { passenger_name, survival_probability, survived, passenger_class, sex, age, twin_name, timestamp },
+      }, { status: 503 });
     }
 
-    // Generate shareable card image
+    const { createCanvas, loadImage } = canvas;
+
+    // Generate image using canvas
     const imageBuffer = await generateShareCard({
       passenger_name,
       survival_probability,
@@ -68,30 +42,16 @@ export async function POST(request) {
       sex,
       age,
       twin_name,
-      timestamp
-    }, createCanvas, loadImage);
+      timestamp,
+    }, createCanvas);
 
-    // Generate shareable link
     const shareId = generateShareId();
     const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'}/share/${shareId}`;
-
-    // In production, store share data (use Redis/PostgreSQL)
-    // For now, we'll just return the image as base64 and the share link.
 
     return NextResponse.json({
       share_id: shareId,
       share_url: shareUrl,
       image: imageBuffer.toString('base64'),
-      og_tags: generateOpenGraphTags({
-        passenger_name,
-        survival_probability,
-        survived,
-        passenger_class,
-        sex,
-        age,
-        twin_name,
-        timestamp
-      }),
       data: {
         passenger_name,
         survival_probability,
@@ -100,8 +60,8 @@ export async function POST(request) {
         sex,
         age,
         twin_name,
-        timestamp
-      }
+        timestamp,
+      },
     });
 
   } catch (error) {
@@ -113,10 +73,10 @@ export async function POST(request) {
   }
 }
 
-async function generateShareCard(data, createCanvasFn, loadImageFn) {
+async function generateShareCard(data, createCanvas) {
   const width = 1200;
   const height = 630;
-  const canvas = createCanvasFn(width, height);
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
   // Background gradient
@@ -215,7 +175,6 @@ async function generateShareCard(data, createCanvasFn, loadImageFn) {
     ctx.fillText(detail, 80, 440 + i * 35);
   });
 
-  // Twin name if available
   if (data.twin_name) {
     ctx.fillStyle = '#c9a84c';
     ctx.font = '18px "Georgia", serif';
@@ -223,7 +182,6 @@ async function generateShareCard(data, createCanvasFn, loadImageFn) {
     ctx.fillText(`Historical Twin: ${data.twin_name}`, width - 80, 475);
   }
 
-  // Timestamp
   const date = new Date(data.timestamp);
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.font = '14px "Georgia", serif';
@@ -234,7 +192,6 @@ async function generateShareCard(data, createCanvasFn, loadImageFn) {
     height - 60
   );
 
-  // Footer
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.font = '16px "Georgia", serif';
   ctx.textAlign = 'center';
@@ -247,37 +204,14 @@ function generateShareId() {
   return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-function generateOpenGraphTags(data) {
-  const title = data.survived 
-    ? `${data.passenger_name} survived the Titanic!` 
-    : `${data.passenger_name} did not survive the Titanic.`;
-  
-  const description = `Survival probability: ${(data.survival_probability * 100).toFixed(1)}% | ${data.twin_name ? `Historical twin: ${data.twin_name}` : 'Check your survival odds'}`;
-  
-  return {
-    title,
-    description,
-    image: `${process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'}/api/share/image/${generateShareId()}`,
-    url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app'}/share/${generateShareId()}`,
-    type: 'website',
-    site_name: 'Titanic AI Bot'
-  };
-}
-
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const shareId = searchParams.get('id');
-
   if (!shareId) {
-    return NextResponse.json(
-      { error: 'Share ID required' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Share ID required' }, { status: 400 });
   }
-
-  // In production, fetch from database
-  // For now, return mock data
-  const shareData = {
+  // Mock data – replace with database lookup in production
+  return NextResponse.json({
     id: shareId,
     passenger_name: 'John Doe',
     survival_probability: 0.72,
@@ -286,8 +220,6 @@ export async function GET(request) {
     sex: 'male',
     age: 35,
     twin_name: 'John Jacob Astor IV',
-    timestamp: new Date().toISOString()
-  };
-
-  return NextResponse.json(shareData);
+    timestamp: new Date().toISOString(),
+  });
 }
