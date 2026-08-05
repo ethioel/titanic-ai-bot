@@ -21,31 +21,25 @@ export async function POST(request) {
       );
     }
 
-    // Check if model exists
     const modelPath = path.join(process.cwd(), 'data', 'models', 'titanic_ensemble.pkl');
     const hasModel = fs.existsSync(modelPath);
 
     let prediction;
 
     if (hasModel) {
-      // Use Python model
       prediction = await predictWithPython(passengerData);
     } else {
-      // Use fallback prediction
       prediction = predictFallback(passengerData);
     }
 
-    // Add SHAP explanations
     const explanations = generateExplanations(passengerData, prediction);
-
-    // Add counterfactuals
     const counterfactuals = generateCounterfactuals(passengerData, prediction);
 
     return NextResponse.json({
       ...prediction,
       explanations,
       counterfactuals,
-      model_used: hasModel ? 'ensemble' : 'fallback'
+      model_used: hasModel ? 'ensemble' : 'fallback',
     });
 
   } catch (error) {
@@ -60,28 +54,18 @@ export async function POST(request) {
 async function predictWithPython(passengerData) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(process.cwd(), 'backend', 'predict.py');
-    
-    const pythonProcess = spawn('python', [
-      scriptPath,
-      JSON.stringify(passengerData)
-    ]);
+    const pythonProcess = spawn('python', [scriptPath, JSON.stringify(passengerData)]);
 
     let result = '';
     let error = '';
 
-    pythonProcess.stdout.on('data', (data) => {
-      result += data.toString();
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-      error += data.toString();
-    });
+    pythonProcess.stdout.on('data', (data) => { result += data.toString(); });
+    pythonProcess.stderr.on('data', (data) => { error += data.toString(); });
 
     pythonProcess.on('close', (code) => {
       if (code === 0) {
         try {
-          const prediction = JSON.parse(result);
-          resolve(prediction);
+          resolve(JSON.parse(result));
         } catch (e) {
           reject(new Error('Failed to parse prediction result'));
         }
@@ -93,39 +77,25 @@ async function predictWithPython(passengerData) {
 }
 
 function predictFallback(passengerData) {
-  // Calculate probability based on historical survival rates
-  const baseRate = 0.38;
-  let prob = baseRate;
-
-  // Class survival rates (historical)
+  let prob = 0.38;
   const classRates = { 1: 0.62, 2: 0.47, 3: 0.24 };
-  if (passengerData.Pclass in classRates) {
-    prob = classRates[passengerData.Pclass];
-  }
+  if (passengerData.Pclass in classRates) prob = classRates[passengerData.Pclass];
 
-  // Gender multiplier
-  if (passengerData.Sex === 'female') {
-    prob += 0.25;
-  } else {
-    prob -= 0.15;
-  }
+  if (passengerData.Sex === 'female') prob += 0.25;
+  else prob -= 0.15;
 
-  // Age multiplier
   const age = passengerData.Age || 30;
   if (age < 12) prob += 0.12;
   else if (age > 60) prob -= 0.08;
   else if (age > 40) prob += 0.03;
 
-  // Family size
   const family = (passengerData.SibSp || 0) + (passengerData.Parch || 0);
   if (family >= 1 && family <= 3) prob += 0.06;
   else if (family > 4) prob -= 0.04;
 
-  // Embarkation port
   if (passengerData.Embarked === 'C') prob += 0.03;
   else if (passengerData.Embarked === 'Q') prob -= 0.02;
 
-  // Clamp probability
   prob = Math.max(0, Math.min(1, prob));
 
   return {
@@ -138,23 +108,20 @@ function predictFallback(passengerData) {
       'Age': 0.15,
       'FamilySize': 0.12,
       'Fare': 0.10,
-      'Embarked': 0.08
-    }
+      'Embarked': 0.08,
+    },
   };
 }
 
 function generateExplanations(passengerData, prediction) {
-  const explanations = [];
   const factors = [];
 
-  // Gender factor
   if (passengerData.Sex === 'female') {
     factors.push({ feature: 'Sex', impact: 0.25, description: 'Women were prioritized in lifeboat loading' });
   } else {
     factors.push({ feature: 'Sex', impact: -0.15, description: 'Men had lower priority for lifeboats' });
   }
 
-  // Class factor
   if (passengerData.Pclass === 1) {
     factors.push({ feature: 'Pclass', impact: 0.20, description: '1st Class passengers had best access to lifeboats' });
   } else if (passengerData.Pclass === 2) {
@@ -163,7 +130,6 @@ function generateExplanations(passengerData, prediction) {
     factors.push({ feature: 'Pclass', impact: -0.10, description: '3rd Class passengers had limited access' });
   }
 
-  // Age factor
   const age = passengerData.Age || 30;
   if (age < 12) {
     factors.push({ feature: 'Age', impact: 0.12, description: 'Children were given priority' });
@@ -171,7 +137,6 @@ function generateExplanations(passengerData, prediction) {
     factors.push({ feature: 'Age', impact: -0.08, description: 'Elderly passengers faced challenges' });
   }
 
-  // Family factor
   const family = (passengerData.SibSp || 0) + (passengerData.Parch || 0);
   if (family >= 1 && family <= 3) {
     factors.push({ feature: 'FamilySize', impact: 0.06, description: 'Small families had better survival' });
@@ -179,28 +144,21 @@ function generateExplanations(passengerData, prediction) {
     factors.push({ feature: 'FamilySize', impact: -0.04, description: 'Large families struggled to stay together' });
   }
 
-  // Sort by impact magnitude
   factors.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 
-  // Format explanations
-  factors.forEach(f => {
-    explanations.push({
-      feature: f.feature,
-      value: passengerData[f.feature] || 'Unknown',
-      impact: f.impact,
-      description: f.description,
-      direction: f.impact > 0 ? 'positive' : 'negative'
-    });
-  });
-
-  return explanations;
+  return factors.map(f => ({
+    feature: f.feature,
+    value: passengerData[f.feature] || 'Unknown',
+    impact: f.impact,
+    description: f.description,
+    direction: f.impact > 0 ? 'positive' : 'negative',
+  }));
 }
 
 function generateCounterfactuals(passengerData, prediction) {
   const currentProb = prediction.probability;
   const counterfactuals = [];
 
-  // Scenario: Change class
   if (passengerData.Pclass > 1) {
     const alt = { ...passengerData, Pclass: 1 };
     const altProb = predictFallback(alt).probability;
@@ -209,11 +167,10 @@ function generateCounterfactuals(passengerData, prediction) {
       change: `Pclass ${passengerData.Pclass} → 1`,
       new_probability: altProb,
       improvement: altProb - currentProb,
-      description: `Upgrading to 1st Class would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`
+      description: `Upgrading to 1st Class would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`,
     });
   }
 
-  // Scenario: Change gender (if male)
   if (passengerData.Sex === 'male') {
     const alt = { ...passengerData, Sex: 'female' };
     const altProb = predictFallback(alt).probability;
@@ -222,11 +179,10 @@ function generateCounterfactuals(passengerData, prediction) {
       change: 'Male → Female',
       new_probability: altProb,
       improvement: altProb - currentProb,
-      description: `Being female would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`
+      description: `Being female would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`,
     });
   }
 
-  // Scenario: Change age (if > 30, make child)
   if ((passengerData.Age || 30) > 30) {
     const alt = { ...passengerData, Age: 8 };
     const altProb = predictFallback(alt).probability;
@@ -235,11 +191,10 @@ function generateCounterfactuals(passengerData, prediction) {
       change: `Age ${passengerData.Age} → 8`,
       new_probability: altProb,
       improvement: altProb - currentProb,
-      description: `Traveling as a child would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`
+      description: `Traveling as a child would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`,
     });
   }
 
-  // Scenario: Change fare
   if (passengerData.Fare < 100) {
     const alt = { ...passengerData, Fare: 200 };
     const altProb = predictFallback(alt).probability;
@@ -248,12 +203,10 @@ function generateCounterfactuals(passengerData, prediction) {
       change: `Fare £${passengerData.Fare} → £200`,
       new_probability: altProb,
       improvement: altProb - currentProb,
-      description: `Paying a higher fare would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`
+      description: `Paying a higher fare would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`,
     });
   }
 
-  // Sort by improvement
   counterfactuals.sort((a, b) => Math.abs(b.improvement) - Math.abs(a.improvement));
-
   return counterfactuals;
 }
