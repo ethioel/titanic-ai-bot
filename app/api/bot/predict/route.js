@@ -1,8 +1,9 @@
+// app/api/bot/predict/route.js
+
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import { randomInt } from 'crypto';
 
 export async function POST(request) {
   try {
@@ -221,7 +222,7 @@ function generateCounterfactuals(passengerData, prediction) {
       change: 'Male → Female',
       new_probability: altProb,
       improvement: altProb - currentProb,
-      description: `Being female would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${Math.abs(altProb - currentProb) * 100:.1f}%`
+      description: `Being female would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`
     });
   }
 
@@ -234,7 +235,7 @@ function generateCounterfactuals(passengerData, prediction) {
       change: `Age ${passengerData.Age} → 8`,
       new_probability: altProb,
       improvement: altProb - currentProb,
-      description: `Traveling as a child would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${Math.abs(altProb - currentProb) * 100:.1f}%`
+      description: `Traveling as a child would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`
     });
   }
 
@@ -247,7 +248,7 @@ function generateCounterfactuals(passengerData, prediction) {
       change: `Fare £${passengerData.Fare} → £200`,
       new_probability: altProb,
       improvement: altProb - currentProb,
-      description: `Paying a higher fare would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${Math.abs(altProb - currentProb) * 100:.1f}%`
+      description: `Paying a higher fare would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`
     });
   }
 
