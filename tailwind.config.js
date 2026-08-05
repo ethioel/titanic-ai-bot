@@ -9,13 +9,13 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // 🔽 These new colors are the fix!
+        // new colors
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
-        // Your existing colors...
+        // existing colors...
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',
