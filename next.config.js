@@ -44,7 +44,7 @@ const nextConfig = {
       };
     }
     
-    // Python module resolution
+    // Alias paths
     config.resolve.alias = {
       ...config.resolve.alias,
       '@backend': require('path').resolve(__dirname, 'backend'),
@@ -118,25 +118,26 @@ const nextConfig = {
     ];
   },
 
-  // Environment variables
+  // Environment variables (fixed)
   env: {
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NEXT_PUBLIC_ENABLE_SIMULATION: process.env.ENABLE_SIMULATION,
-    NEXT_PUBLIC_ENABLE_SHAP: process.env.ENABLE_SHAP,
-    NEXT_PUBLIC_ENABLE_TWIN: process.env.ENABLE_TWIN_MATCHING
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || '',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
+    NEXT_PUBLIC_ENABLE_SIMULATION: process.env.ENABLE_SIMULATION || 'true',
+    NEXT_PUBLIC_ENABLE_SHAP: process.env.ENABLE_SHAP || 'true',
+    NEXT_PUBLIC_ENABLE_TWIN: process.env.ENABLE_TWIN_MATCHING || 'true'
   },
 
   // Output
   output: 'standalone',
   trailingSlash: false,
 
-  // i18n
+  // i18n configuration (localeDetection warning)
   i18n: {
-    locales: ['en', 'fr', 'es', 'de'],
+    locales: ['en'],
     defaultLocale: 'en',
-    localeDetection: true
+    localeDetection: false  // avoid warning
   }
 };
 
+// Export with PWA wrapper
 module.exports = withPWA(nextConfig);
