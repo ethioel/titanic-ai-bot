@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createCanvas, loadImage } from 'canvas';
+//import { createCanvas, loadImage } from 'canvas';
 import { join } from 'path';
 import { readFile } from 'fs/promises';
 
