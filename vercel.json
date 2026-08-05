@@ -1,13 +1,10 @@
 {
   "version": 2,
-  "name": "titanic-ai-bot",
+  "name": "sami-titanic-ai",
   "builds": [
     {
       "src": "package.json",
-      "use": "@vercel/next",
-      "config": {
-        "maxLambdaSize": "30mb"
-      }
+      "use": "@vercel/next"
     },
     {
       "src": "backend/**/*.py",
@@ -33,8 +30,8 @@
     }
   ],
   "env": {
-    "KAGGLE_USERNAME": "@kaggle_username",
-    "KAGGLE_KEY": "@kaggle_key",
+    "KAGGLE_USERNAME": "sami_here",        
+    "KAGGLE_KEY": "your_key_here",           
     "MODEL_PATH": "./data/models/titanic_ensemble.pkl",
     "SHAP_BACKGROUND_SIZE": "100",
     "ENABLE_SIMULATION": "true",
