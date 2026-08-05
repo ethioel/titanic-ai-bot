@@ -208,7 +208,7 @@ function generateCounterfactuals(passengerData, prediction) {
       change: `Pclass ${passengerData.Pclass} → 1`,
       new_probability: altProb,
       improvement: altProb - currentProb,
-      description: `Upgrading to 1st Class would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${Math.abs(altProb - currentProb) * 100:.1f}%`
+      description: `Upgrading to 1st Class would ${altProb > currentProb ? 'increase' : 'decrease'} your survival odds by ${(Math.abs(altProb - currentProb) * 100).toFixed(1)}%`
     });
   }
 
