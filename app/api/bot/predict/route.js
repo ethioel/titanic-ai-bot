@@ -10,7 +10,6 @@ export async function POST(request) {
     const body = await request.json();
     const passengerData = body;
 
-    // Validate required fields
     const required = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked'];
     const missing = required.filter(f => passengerData[f] === undefined || passengerData[f] === null);
     
@@ -159,6 +158,7 @@ function generateCounterfactuals(passengerData, prediction) {
   const currentProb = prediction.probability;
   const counterfactuals = [];
 
+  // Class upgrade
   if (passengerData.Pclass > 1) {
     const alt = { ...passengerData, Pclass: 1 };
     const altProb = predictFallback(alt).probability;
@@ -171,6 +171,7 @@ function generateCounterfactuals(passengerData, prediction) {
     });
   }
 
+  // Gender change
   if (passengerData.Sex === 'male') {
     const alt = { ...passengerData, Sex: 'female' };
     const altProb = predictFallback(alt).probability;
@@ -183,6 +184,7 @@ function generateCounterfactuals(passengerData, prediction) {
     });
   }
 
+  // Age change (make child)
   if ((passengerData.Age || 30) > 30) {
     const alt = { ...passengerData, Age: 8 };
     const altProb = predictFallback(alt).probability;
@@ -195,6 +197,7 @@ function generateCounterfactuals(passengerData, prediction) {
     });
   }
 
+  // Higher fare
   if (passengerData.Fare < 100) {
     const alt = { ...passengerData, Fare: 200 };
     const altProb = predictFallback(alt).probability;
