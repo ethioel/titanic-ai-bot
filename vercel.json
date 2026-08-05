@@ -1,16 +1,6 @@
 {
   "version": 2,
-  "name": "sami-titanic-ai",
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    },
-    {
-      "src": "backend/**/*.py",
-      "use": "@vercel/python"
-    }
-  ],
+  "name": "titanic-ai-bot",
   "routes": [
     {
       "src": "/api/(.*)",
@@ -30,8 +20,8 @@
     }
   ],
   "env": {
-    "KAGGLE_USERNAME": "sami_here",        
-    "KAGGLE_KEY": "your_key_here",           
+    "KAGGLE_USERNAME": "sami_here",
+    "KAGGLE_KEY": "your_key_here",
     "MODEL_PATH": "./data/models/titanic_ensemble.pkl",
     "SHAP_BACKGROUND_SIZE": "100",
     "ENABLE_SIMULATION": "true",
