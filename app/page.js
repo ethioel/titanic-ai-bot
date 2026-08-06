@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Github,
   Twitter,
+  Linkedin,
   Heart,
   Zap,
   Shield,
@@ -393,14 +394,35 @@ export default function Home() {
               <span>© 2024 Titanic AI</span>
               <span className="hidden md:inline">·</span>
               <span className="hidden md:inline flex items-center gap-1">
-                Built with <Heart size={12} className="text-red-500 fill-red-500" /> using Next.js
+                Built with <Heart size={12} className="text-red-500 fill-red-500" /> by Samuel.K
               </span>
             </div>
             <div className="flex items-center gap-4">
-              <a href="https://github.com/ethioel/titanic-ai-bot" target="_blank" rel="noopener" className="text-muted-foreground hover:text-foreground transition-colors">
+              <a
+                href="https://github.com/ethioel"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="GitHub"
+              >
                 <Github size={18} />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+              <a
+                href="https://www.linkedin.com/in/samuel-kahsay"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="LinkedIn"
+              >
+                <Linkedin size={18} />
+              </a>
+              <a
+                href="https://twitter.com/ethioel"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="X / Twitter"
+              >
                 <Twitter size={18} />
               </a>
             </div>
