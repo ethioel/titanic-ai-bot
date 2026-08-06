@@ -9,14 +9,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // new colors
+        // ── Semantic tokens (required for globals.css @apply) ──
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
-        // existing colors...
         primary: {
+          DEFAULT: '#2563eb',        // maps to bg-primary
+          foreground: '#ffffff',     // maps to text-primary-foreground
           50: '#eff6ff',
           100: '#dbeafe',
           200: '#bfdbfe',
@@ -29,6 +30,31 @@ module.exports = {
           900: '#1e3a8a',
           950: '#172554',
         },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+        // ── Your existing custom palette ──
         titanic: {
           blue: '#1a3a5c',
           gold: '#c9a84c',
@@ -70,24 +96,24 @@ module.exports = {
           '50%': { transform: 'translateY(-10px)' }
         },
         glow: {
-          '0%, 100%': { opacity: 1 },
-          '50%': { opacity: 0.5 }
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.5' }
         },
         slideUp: {
-          '0%': { transform: 'translateY(20px)', opacity: 0 },
-          '100%': { transform: 'translateY(0)', opacity: 1 }
+          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' }
         },
         slideDown: {
-          '0%': { transform: 'translateY(-20px)', opacity: 0 },
-          '100%': { transform: 'translateY(0)', opacity: 1 }
+          '0%': { transform: 'translateY(-20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' }
         },
         fadeIn: {
-          '0%': { opacity: 0 },
-          '100%': { opacity: 1 }
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' }
         },
         scaleIn: {
-          '0%': { transform: 'scale(0.9)', opacity: 0 },
-          '100%': { transform: 'scale(1)', opacity: 1 }
+          '0%': { transform: 'scale(0.9)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' }
         },
         shimmer: {
           '0%': { backgroundPosition: '-1000px 0' },
@@ -109,6 +135,9 @@ module.exports = {
         '4xl': '1920px'
       },
       borderRadius: {
+        'lg': 'var(--radius)',
+        'md': 'calc(var(--radius) - 2px)',
+        'sm': 'calc(var(--radius) - 4px)',
         '4xl': '2rem',
         '5xl': '3rem'
       },
