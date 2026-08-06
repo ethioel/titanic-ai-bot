@@ -1,3 +1,7 @@
+"""
+SHAPExplainer + CounterfactualAnalyzer with build-time SHAP support.
+Fits into: backend/models/shap_explainer.py
+"""
 from __future__ import annotations
 
 import logging
@@ -15,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 class SHAPExplainer:
     """
-    SHAP wrapper with auto-detection of explainer type.
-    Backward-compatible API.
+    SHAP wrapper.
+    If the model artifact contains a pre-fitted 'shap_explainer', uses it directly.
+    Otherwise falls back to fitting at runtime (requires background data).
     """
 
     def __init__(self, model_path: Optional[str] = None) -> None:
@@ -24,17 +29,21 @@ class SHAPExplainer:
         self.model_data = joblib.load(self.model_path)
         self.model = self.model_data["model"]
         self.feature_names: List[str] = self.model_data["feature_names"]
-        self.explainer: Optional[Any] = None
-        self.background_data: Optional[pd.DataFrame] = None
+
+        # Check for pre-fitted explainer (saved during training)
+        self.explainer = self.model_data.get("shap_explainer")
+        if self.explainer is not None:
+            logger.info("Loaded pre-fitted SHAP explainer from model artifact")
+        else:
+            logger.warning("No pre-fitted SHAP explainer found. Call fit_explainer() before explain().")
 
     def fit_explainer(self, X_background: pd.DataFrame, n_samples: int = 100) -> None:
-        """Fit SHAP explainer with background data."""
+        """Fit and cache SHAP explainer. Call this during training, not at runtime."""
         if len(X_background) == 0:
             raise ValueError("Background data cannot be empty")
 
-        self.background_data = shap.sample(X_background, min(n_samples, len(X_background)))
+        background = shap.sample(X_background, min(n_samples, len(X_background)))
 
-        # Prefer TreeExplainer on RF for speed; fall back to KernelExplainer
         rf_estimator = None
         if hasattr(self.model, "named_estimators_"):
             rf_estimator = self.model.named_estimators_.get("rf")
@@ -44,30 +53,22 @@ class SHAPExplainer:
             logger.info("Fitted TreeExplainer on RandomForest")
         else:
             self.explainer = shap.KernelExplainer(
-                lambda x: self.model.predict_proba(x)[:, 1],
-                self.background_data,
+                lambda x: self.model.predict_proba(x)[:, 1], background
             )
             logger.info("Fitted KernelExplainer")
 
     def explain_prediction(self, X_instance: np.ndarray) -> List[Dict[str, Any]]:
-        """
-        Get SHAP values for a single preprocessed instance.
-        X_instance: 2D numpy array of shape (1, n_features)
-        """
         if self.explainer is None:
-            raise ValueError("Explainer not fitted. Call fit_explainer first.")
+            raise ValueError("Explainer not fitted. Call fit_explainer() or use a model with pre-fitted SHAP.")
 
         shap_values = self.explainer.shap_values(X_instance)
 
-        # Normalize shape across explainer types and versions
         if isinstance(shap_values, list):
-            # TreeExplainer for binary classification returns list of two arrays
             shap_values = shap_values[1]
         elif shap_values.ndim > 2:
-            # Some versions return (n_samples, n_features, n_classes)
             shap_values = shap_values[:, :, 1]
 
-        explanation: List[Dict[str, Any]] = []
+        explanation = []
         for i, feature in enumerate(self.feature_names):
             explanation.append({
                 "feature": feature,
@@ -81,12 +82,6 @@ class SHAPExplainer:
 
 
 class CounterfactualAnalyzer:
-    """
-    Generates actionable counterfactual explanations.
-    Backward-compatible API: generate_counterfactuals(passenger_data, num_alternatives)
-    """
-
-    # Only actionable features — things a passenger could have realistically changed
     ACTIONABLE_FEATURES: Dict[str, Dict[str, Any]] = {
         "Pclass": {
             "description": "Upgrade to 1st Class",
@@ -110,7 +105,6 @@ class CounterfactualAnalyzer:
         self._model: Optional[TitanicEnsemble] = None
 
     def _get_model(self) -> TitanicEnsemble:
-        """Lazy-load model to avoid repeated I/O and circular imports."""
         if self._model is None:
             self._model = TitanicEnsemble()
             self._model.load_model(self.model_path)
@@ -121,10 +115,6 @@ class CounterfactualAnalyzer:
         passenger_data: Dict[str, Any],
         num_alternatives: int = 3,
     ) -> Dict[str, Any]:
-        """
-        Generate counterfactual explanations based on actionable changes.
-        Backward-compatible return shape.
-        """
         model = self._get_model()
         current_result = model.predict(passenger_data)
         current_prob = current_result["probability"]
@@ -148,11 +138,11 @@ class CounterfactualAnalyzer:
             description = cfg["format"](current_val, new_val)
 
             if improvement > 0.05:
-                expl = f"✅ {description}: Survival odds increase from {current_prob:.0%} to {result['probability']:.0%}"
+                expl = f"✅ {description}: odds {current_prob:.0%} → {result['probability']:.0%}"
             elif improvement < -0.05:
-                expl = f"⚠️ {description}: Survival odds decrease from {current_prob:.0%} to {result['probability']:.0%}"
+                expl = f"⚠️ {description}: odds {current_prob:.0%} → {result['probability']:.0%}"
             else:
-                expl = f"ℹ️ {description}: Survival odds remain similar ({result['probability']:.0%})"
+                expl = f"ℹ️ {description}: odds stay ~{result['probability']:.0%}"
 
             counterfactuals.append({
                 "scenario": cfg["description"],
@@ -164,7 +154,6 @@ class CounterfactualAnalyzer:
                 "passenger": alt,
             })
 
-        # Sort by absolute improvement and slice
         counterfactuals.sort(key=lambda x: abs(x["improvement"]), reverse=True)
         counterfactuals = counterfactuals[:num_alternatives]
 
