@@ -4,16 +4,6 @@ const nextConfig = {
   swcMinify: true,
   compress: true,
   experimental: {
-    serverComponentsExternalPackages: [
-      'scikit-learn',
-      'pandas',
-      'numpy',
-      'joblib',
-      'xgboost',
-      'catboost',
-      'shap',
-      'lightgbm',
-    ],
     optimizeCss: true,
     webpackBuildWorker: true,
   },
@@ -34,7 +24,6 @@ const nextConfig = {
     return config;
   },
   images: {
-    domains: ['kaggle.com', 'storage.googleapis.com'],
     formats: ['image/avif', 'image/webp'],
   },
   env: {
