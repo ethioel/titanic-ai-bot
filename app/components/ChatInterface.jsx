@@ -18,6 +18,7 @@ export default function ChatInterface() {
   const [passengerData, setPassengerData] = useState({});
   const [prediction, setPrediction] = useState(null);
   const [simProbability, setSimProbability] = useState(null);
+  const [simState, setSimState] = useState(null);
   const [typing, setTyping] = useState(false);
 
   const messagesEndRef = useRef(null);
@@ -32,7 +33,6 @@ export default function ChatInterface() {
     }
     setSessionId(session);
 
-    // Single welcome bubble — backend will process the first message as the name
     setMessages([{
       id: 'welcome',
       type: 'bot',
@@ -75,7 +75,6 @@ export default function ChatInterface() {
     setTyping(true);
 
     try {
-      // ── FIX: Do NOT send 'step' — server owns the state ──
       const { data } = await axios.post('/api/bot/interview', {
         session_id: sessionId,
         message: text,
@@ -97,7 +96,8 @@ export default function ChatInterface() {
           action: data.action
         }]);
 
-        if (data.action === 'show_twin') fetchTwin();
+        // ── FIX: Pass fresh passenger_data directly, avoid stale closure ──
+        if (data.action === 'show_twin') fetchTwin(data.passenger_data);
         if (data.action === 'start_simulation') {
           const baseProb = data.prediction?.probability || 0.5;
           setSimProbability(baseProb);
@@ -126,27 +126,46 @@ export default function ChatInterface() {
     }
   };
 
-  // ── Special Actions ──
-  const fetchTwin = async () => {
+  // ── FIX: fetchTwin accepts explicit data to avoid stale state ──
+  const fetchTwin = async (explicitData) => {
+    const payload = explicitData || passengerData;
+    
+    // Defensive: if we have nothing, show error immediately
+    if (!payload || Object.keys(payload).length === 0) {
+      setMessages(prev => [...prev, {
+        id: `twin_err_${Date.now()}`,
+        type: 'error',
+        content: '⚠️ No passenger data found. Please complete your profile first.',
+        timestamp: new Date()
+      }]);
+      return;
+    }
+
     try {
       setLoading(true);
       const { data } = await axios.post('/api/bot/twin', {
         session_id: sessionId,
-        passenger_data: passengerData
+        passenger_data: payload
       });
+      
+      // Defensive: if API returns error field
+      if (data.error) throw new Error(data.error);
+      
+      const narrative = data.narrative || 'No historical match found.';
       
       setMessages(prev => [...prev, {
         id: `twin_${Date.now()}`,
         type: 'twin',
-        content: data.narrative,
+        content: narrative,
         twin: data,
         timestamp: new Date()
       }]);
     } catch (err) {
+      console.error('Twin fetch error:', err);
       setMessages(prev => [...prev, {
         id: `twin_err_${Date.now()}`,
         type: 'error',
-        content: '⚠️ Archive search failed.',
+        content: `⚠️ Archive search failed: ${err.response?.data?.error || err.message || 'Unknown error'}`,
         timestamp: new Date()
       }]);
     } finally {
@@ -163,6 +182,9 @@ export default function ChatInterface() {
         start: true,
         initial_probability: baseProb
       });
+      
+      if (data.state) setSimState(data.state);
+      
       setMessages(prev => [...prev, {
         id: `sim_${Date.now()}`,
         type: 'simulation',
@@ -183,6 +205,16 @@ export default function ChatInterface() {
   };
 
   const handleSimChoice = async (decisionId) => {
+    if (!simState) {
+      setMessages(prev => [...prev, {
+        id: `sim_err_${Date.now()}`,
+        type: 'error',
+        content: '⚠️ Simulation state lost. Please restart.',
+        timestamp: new Date()
+      }]);
+      return;
+    }
+
     try {
       setLoading(true);
       const currentProb = simProbability !== null ? simProbability : (prediction?.probability || 0.5);
@@ -190,12 +222,12 @@ export default function ChatInterface() {
       const { data } = await axios.post('/api/bot/simulate', {
         session_id: sessionId,
         decision_id: decisionId,
+        state: simState,
         current_probability: currentProb
       });
       
-      if (data.survival_probability !== undefined) {
-        setSimProbability(data.survival_probability);
-      }
+      if (data.state) setSimState(data.state);
+      if (data.survival_probability !== undefined) setSimProbability(data.survival_probability);
       
       setMessages(prev => [...prev, {
         id: `sim_${Date.now()}`,
@@ -217,7 +249,7 @@ export default function ChatInterface() {
   };
 
   const handleAction = (action) => {
-    if (action.id === 'show_twin') fetchTwin();
+    if (action.id === 'show_twin') fetchTwin(passengerData);
     else if (action.id === 'start_simulation') {
       const baseProb = prediction?.probability || 0.5;
       setSimProbability(baseProb);
@@ -237,7 +269,7 @@ export default function ChatInterface() {
   }).format(d);
 
   const renderText = (text) => {
-    if (!text) return null;
+    if (!text) return <span className="italic text-slate-400">No content</span>;
     return text.split('\n').map((line, i) => {
       const parts = line.split(/(\*\*.*?\*\*)/);
       return (
@@ -268,7 +300,7 @@ export default function ChatInterface() {
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
       
-      {/* ═══ NO HEADER — favicon handles browser tab branding ═══ */}
+      {/* ═══ NO HEADER ═══ */}
       
       {/* ═══ MESSAGES ═══ */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
