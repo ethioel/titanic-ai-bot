@@ -16,7 +16,6 @@ export default function ChatInterface() {
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [passengerData, setPassengerData] = useState({});
-  const [step, setStep] = useState('welcome');
   const [prediction, setPrediction] = useState(null);
   const [simProbability, setSimProbability] = useState(null);
   const [typing, setTyping] = useState(false);
@@ -33,7 +32,7 @@ export default function ChatInterface() {
     }
     setSessionId(session);
 
-    // Single welcome — backend drives the conversation
+    // Single welcome bubble — backend will process the first message as the name
     setMessages([{
       id: 'welcome',
       type: 'bot',
@@ -76,15 +75,14 @@ export default function ChatInterface() {
     setTyping(true);
 
     try {
+      // ── FIX: Do NOT send 'step' — server owns the state ──
       const { data } = await axios.post('/api/bot/interview', {
         session_id: sessionId,
         message: text,
-        step: step,
         passenger_data: passengerData
       });
 
       if (data.passenger_data) setPassengerData(data.passenger_data);
-      if (data.step) setStep(data.step);
       if (data.prediction) setPrediction(data.prediction);
 
       setTimeout(() => {
@@ -119,7 +117,7 @@ export default function ChatInterface() {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [input, loading, sessionId, step, passengerData]);
+  }, [input, loading, sessionId, passengerData]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -148,7 +146,7 @@ export default function ChatInterface() {
       setMessages(prev => [...prev, {
         id: `twin_err_${Date.now()}`,
         type: 'error',
-        content: '⚠️ Archive search failed. The historical records are incomplete.',
+        content: '⚠️ Archive search failed.',
         timestamp: new Date()
       }]);
     } finally {
@@ -176,7 +174,7 @@ export default function ChatInterface() {
       setMessages(prev => [...prev, {
         id: `sim_err_${Date.now()}`,
         type: 'error',
-        content: '⚠️ Simulation engine failure. Please restart.',
+        content: '⚠️ Simulation engine failure.',
         timestamp: new Date()
       }]);
     } finally {
@@ -270,32 +268,8 @@ export default function ChatInterface() {
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
       
-      {/* ═══ CLEAN HEADER (no big ship icon — favicon handles browser tab) ═══ */}
-      <header className="flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 z-20">
-        <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              Titanic AI
-              <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full uppercase tracking-wider">
-                Survival Engine
-              </span>
-            </h1>
-            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              <span>Historical Analysis Active</span>
-            </div>
-          </div>
-        </div>
-
-        <button
-          onClick={() => handleSend('reset')}
-          className="p-2.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all active:scale-95"
-          title="New Session"
-        >
-          <RotateCcw size={18} />
-        </button>
-      </header>
-
+      {/* ═══ NO HEADER — favicon handles browser tab branding ═══ */}
+      
       {/* ═══ MESSAGES ═══ */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
         <AnimatePresence initial={false}>
@@ -311,12 +285,10 @@ export default function ChatInterface() {
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
               >
-                {/* Avatar */}
                 <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center shadow-md text-white ${cfg.bg}`}>
                   {cfg.icon}
                 </div>
 
-                {/* Bubble */}
                 <div className={`max-w-[82%] md:max-w-[65%] ${isUser ? 'items-end' : 'items-start'}`}>
                   <div className={`relative px-5 py-3.5 rounded-2xl shadow-sm ${
                     isUser
@@ -473,7 +445,7 @@ export default function ChatInterface() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={step === 'welcome' ? "Enter your name to begin..." : "Type your message..."}
+              placeholder="Type your message..."
               disabled={loading || typing}
               rows={1}
               className="flex-1 bg-transparent border-0 px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 resize-none focus:outline-none disabled:opacity-50 min-h-[44px]"
@@ -486,9 +458,6 @@ export default function ChatInterface() {
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
             </button>
           </div>
-          <p className="text-[10px] text-center text-slate-400 dark:text-slate-600 mt-2 tracking-wide">
-            RMS Titanic Survival Engine • AI-Powered Historical Simulation
-          </p>
         </div>
       </div>
     </div>
