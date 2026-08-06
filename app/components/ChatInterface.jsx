@@ -1,28 +1,17 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Send, 
-  Bot, 
-  User, 
-  Loader2,
-  AlertCircle,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Share2,
-  Users,
-  Ship,
-  LifeBuoy,
-  Sparkles
+  Send, Bot, User, Loader2, Ship, Waves, 
+  LifeBuoy, AlertCircle, Sparkles, RotateCcw, 
+  ChevronRight, History, Compass
 } from 'lucide-react';
 
-const SESSION_KEY = 'titanic_session';
+const SESSION_KEY = 'titanic_session_v2';
 
 export default function ChatInterface() {
-  // State
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,93 +19,74 @@ export default function ChatInterface() {
   const [passengerData, setPassengerData] = useState({});
   const [step, setStep] = useState('welcome');
   const [prediction, setPrediction] = useState(null);
-  const [simulationActive, setSimulationActive] = useState(false);
-  const [showShare, setShowShare] = useState(false);
   const [typing, setTyping] = useState(false);
-  
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Initialize chat session
+  // ── Init Session ──
   useEffect(() => {
     let session = localStorage.getItem(SESSION_KEY);
     if (!session) {
-      session = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      session = `titanic_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       localStorage.setItem(SESSION_KEY, session);
     }
     setSessionId(session);
-    
-    // Welcome message
-    const welcomeMessages = [
-      {
-        id: 'welcome',
-        type: 'bot',
-        content: `🚢 Welcome aboard the RMS Titanic, passenger!
 
-I am your historical guide and survival analyst. I'll help you understand your chances of survival through an immersive interactive experience.
+    // Single welcome — backend drives the name question
+    setMessages([{
+      id: 'welcome',
+      type: 'bot',
+      content: "🚢 **Welcome aboard the RMS Titanic.**\n\nI am your AI Survival Analyst. I'll assess your passenger profile, find your **Historical Twin**, and run a real-time emergency simulation.\n\n**Type your name below to begin.**",
+      timestamp: new Date(),
+      actions: []
+    }]);
 
-We'll start with your passenger registration, then I'll analyze your profile, find your historical twin, and run a real-time emergency simulation.
-
-Shall we begin?`,
-        timestamp: new Date()
-      },
-      {
-        id: 'name_prompt',
-        type: 'bot',
-        content: "What is your name, passenger? (Or type 'skip' to remain anonymous)",
-        timestamp: new Date()
-      }
-    ];
-    
-    setMessages(welcomeMessages);
-    inputRef.current?.focus();
+    setTimeout(() => inputRef.current?.focus(), 600);
   }, []);
 
-  // Auto-scroll
+  // ── Auto-scroll ──
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, typing]);
 
-  // Handle message sending
-  const sendMessage = async (text) => {
-    if (!text.trim() || loading) return;
-    
-    const userMessage = {
+  // ── Auto-resize textarea ──
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 128) + 'px';
+    }
+  }, [input]);
+
+  // ── Send Handler ──
+  const handleSend = useCallback(async (overrideText) => {
+    const text = (overrideText || input).trim();
+    if (!text || loading || !sessionId) return;
+
+    const userMsg = {
       id: `user_${Date.now()}`,
       type: 'user',
-      content: text.trim(),
+      content: text,
       timestamp: new Date()
     };
-    
-    setMessages(prev => [...prev, userMessage]);
+
+    setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
     setTyping(true);
-    
+
     try {
-      const response = await axios.post('/api/bot/interview', {
+      const { data } = await axios.post('/api/bot/interview', {
         session_id: sessionId,
-        message: text.trim(),
+        message: text,
         step: step,
         passenger_data: passengerData
       });
-      
-      const data = response.data;
-      
-      // Update state
-      if (data.passenger_data) {
-        setPassengerData(data.passenger_data);
-      }
-      
-      if (data.step) {
-        setStep(data.step);
-      }
-      
-      if (data.prediction) {
-        setPrediction(data.prediction);
-      }
-      
-      // Add bot response with animation delay
+
+      if (data.passenger_data) setPassengerData(data.passenger_data);
+      if (data.step) setStep(data.step);
+      if (data.prediction) setPrediction(data.prediction);
+
       setTimeout(() => {
         setTyping(false);
         setMessages(prev => [...prev, {
@@ -124,32 +94,53 @@ Shall we begin?`,
           type: 'bot',
           content: data.message,
           timestamp: new Date(),
-          actions: data.actions,
+          actions: data.actions || [],
           prediction: data.prediction,
-          twin: data.twin,
-          simulation: data.simulation
+          action: data.action
         }]);
-      }, 500);
-      
-      // Handle special actions
-      if (data.action === 'show_twin') {
-        await fetchHistoricalTwin();
-      }
-      
-      if (data.action === 'start_simulation') {
-        startSimulation();
-      }
-      
-      if (data.action === 'show_prediction') {
-        setShowShare(true);
-      }
-      
-    } catch (error) {
+
+        if (data.action === 'show_twin') fetchTwin();
+        if (data.action === 'start_simulation') startSimulation();
+      }, 700);
+
+    } catch (err) {
       setTyping(false);
       setMessages(prev => [...prev, {
-        id: `error_${Date.now()}`,
+        id: `err_${Date.now()}`,
         type: 'error',
-        content: '⚠️ I encountered an issue. Please try again.',
+        content: '⚠️ **Connection lost with the bridge.** Please try again.',
+        timestamp: new Date()
+      }]);
+    } finally {
+      setLoading(false);
+      setTimeout(() => inputRef.current?.focus(), 150);
+    }
+  }, [input, loading, sessionId, step, passengerData]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // ── Special Actions ──
+  const fetchTwin = async () => {
+    try {
+      setLoading(true);
+      const { data } = await axios.post('/api/bot/twin', { passenger_data: passengerData });
+      setMessages(prev => [...prev, {
+        id: `twin_${Date.now()}`,
+        type: 'twin',
+        content: data.narrative,
+        twin: data,
+        timestamp: new Date()
+      }]);
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        id: `twin_err_${Date.now()}`,
+        type: 'error',
+        content: '⚠️ Archive search failed. The historical records are incomplete.',
         timestamp: new Date()
       }]);
     } finally {
@@ -157,347 +148,334 @@ Shall we begin?`,
     }
   };
 
-  // Fetch historical twin
-  const fetchHistoricalTwin = async () => {
-    try {
-      const response = await axios.post('/api/bot/twin', {
-        passenger_data: passengerData
-      });
-      
-      setMessages(prev => [...prev, {
-        id: `twin_${Date.now()}`,
-        type: 'twin',
-        content: '👥 I found your historical twin!',
-        twin: response.data,
-        timestamp: new Date()
-      }]);
-    } catch (error) {
-      console.error('Error fetching twin:', error);
-    }
-  };
-
-  // Start simulation
   const startSimulation = async () => {
     try {
-      const response = await axios.post('/api/bot/simulate', {
+      setLoading(true);
+      const { data } = await axios.post('/api/bot/simulate', {
         passenger_data: passengerData,
         start: true,
         initial_probability: prediction?.probability || 0.5
       });
-      
-      setSimulationActive(true);
       setMessages(prev => [...prev, {
         id: `sim_${Date.now()}`,
         type: 'simulation',
-        content: '🚨 Emergency Simulation Starting...',
-        simulation: response.data,
-        timestamp: new Date()
-      }]);
-    } catch (error) {
-      console.error('Error starting simulation:', error);
-    }
-  };
-
-  // Handle simulation decision
-  const handleSimulationDecision = async (decisionId) => {
-    try {
-      const response = await axios.post('/api/bot/simulate', {
-        decision_id: decisionId,
-        session_id: sessionId
-      });
-      
-      const data = response.data;
-      
-      setMessages(prev => [...prev, {
-        id: `sim_update_${Date.now()}`,
-        type: 'simulation_update',
         content: data.message,
         simulation: data,
         timestamp: new Date()
       }]);
-      
-      if (data.complete) {
-        setSimulationActive(false);
-        setShowShare(true);
-      }
-    } catch (error) {
-      console.error('Error processing decision:', error);
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        id: `sim_err_${Date.now()}`,
+        type: 'error',
+        content: '⚠️ Simulation engine failure. Please restart.',
+        timestamp: new Date()
+      }]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handle key press
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(input);
+  const handleSimChoice = async (decisionId) => {
+    try {
+      setLoading(true);
+      const { data } = await axios.post('/api/bot/simulate', {
+        decision_id: decisionId,
+        initial_probability: prediction?.probability || 0.5
+      });
+      setMessages(prev => [...prev, {
+        id: `sim_${Date.now()}`,
+        type: data.complete ? 'sim_result' : 'simulation',
+        content: data.message,
+        simulation: data,
+        timestamp: new Date()
+      }]);
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        id: `sim_err_${Date.now()}`,
+        type: 'error',
+        content: '⚠️ Decision processing failed.',
+        timestamp: new Date()
+      }]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Render message
-  const renderMessage = (msg) => {
-    const isUser = msg.type === 'user';
-    const isBot = msg.type === 'bot';
-    const isError = msg.type === 'error';
-    const isTwin = msg.type === 'twin';
-    const isSimulation = msg.type === 'simulation' || msg.type === 'simulation_update';
-    
-    if (isUser) {
+  const handleAction = (action) => {
+    if (action.id === 'show_twin') fetchTwin();
+    else if (action.id === 'start_simulation') startSimulation();
+    else if (action.id === 'reset') handleSend('reset');
+    else if (action.id.startsWith('class_')) handleSend(action.id.replace('class_', ''));
+    else if (action.id.startsWith('sex_')) handleSend(action.id.replace('sex_', ''));
+    else if (action.id.startsWith('fam_')) handleSend(action.id.replace('fam_', ''));
+    else handleSend(action.text);
+  };
+
+  // ── Helpers ──
+  const fmtTime = (d) => new Intl.DateTimeFormat('en-US', {
+    hour: '2-digit', minute: '2-digit'
+  }).format(d);
+
+  const renderText = (text) => {
+    if (!text) return null;
+    return text.split('\n').map((line, i) => {
+      const parts = line.split(/(\*\*.*?\*\*)/);
       return (
-        <motion.div
-          key={msg.id}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-start space-x-2 justify-end mb-4"
-        >
-          <div className="bg-blue-600 rounded-lg px-4 py-3 max-w-3xl shadow-sm">
-            <p className="whitespace-pre-wrap text-white text-sm">{msg.content}</p>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-gray-500 flex-shrink-0 flex items-center justify-center text-white text-sm font-bold">
-            <User size={16} />
-          </div>
-        </motion.div>
+        <p key={i} className="mb-0.5 last:mb-0">
+          {parts.map((part, j) => 
+            part.startsWith('**') && part.endsWith('**') ? (
+              <span key={j} className="font-bold text-slate-900 dark:text-white">
+                {part.slice(2, -2)}
+              </span>
+            ) : (
+              <span key={j}>{part}</span>
+            )
+          )}
+        </p>
       );
-    }
-    
-    if (isBot) {
-      return (
-        <motion.div
-          key={msg.id}
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-start space-x-2 mb-4"
-        >
-          <div className="w-8 h-8 rounded-full bg-blue-500 flex-shrink-0 flex items-center justify-center text-white text-sm font-bold">
-            <Bot size={16} />
-          </div>
-          <div className="bg-white rounded-lg px-4 py-3 max-w-3xl shadow-sm border border-gray-100">
-            <p className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed">
-              {msg.content}
-            </p>
-            {msg.actions && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {msg.actions.map((action) => (
-                  <button
-                    key={action.id}
-                    onClick={() => {
-                      if (action.id === 'start_simulation') {
-                        startSimulation();
-                      } else if (action.id === 'show_twin') {
-                        fetchHistoricalTwin();
-                      } else {
-                        sendMessage(action.text);
-                      }
-                    }}
-                    className="px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                  >
-                    {action.text}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.div>
-      );
-    }
-    
-    if (isTwin && msg.twin) {
-      return (
-        <motion.div
-          key={msg.id}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex items-start space-x-2 mb-4"
-        >
-          <div className="w-8 h-8 rounded-full bg-purple-500 flex-shrink-0 flex items-center justify-center text-white text-sm font-bold">
-            <Users size={16} />
-          </div>
-          <div className="bg-purple-50 rounded-lg px-4 py-3 max-w-3xl border border-purple-200 shadow-sm">
-            <div className="font-semibold text-purple-800 mb-2">👤 Your Historical Twin</div>
-            <p className="text-gray-700 text-sm whitespace-pre-wrap">{msg.twin.narrative}</p>
-            {msg.twin.top_matches && (
-              <div className="mt-3">
-                <div className="text-xs font-medium text-gray-500 mb-1">Other close matches:</div>
-                {msg.twin.top_matches.slice(1, 3).map((match, i) => (
-                  <div key={i} className="text-xs text-gray-600 flex items-center space-x-1">
-                    <span>•</span>
-                    <span>{match.name}</span>
-                    <span className="text-gray-400">({(match.similarity * 100).toFixed(0)}% match)</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </motion.div>
-      );
-    }
-    
-    if (isSimulation && msg.simulation) {
-      const sim = msg.simulation;
-      return (
-        <motion.div
-          key={msg.id}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex items-start space-x-2 mb-4"
-        >
-          <div className="w-8 h-8 rounded-full bg-red-500 flex-shrink-0 flex items-center justify-center text-white text-sm font-bold animate-pulse">
-            <AlertCircle size={16} />
-          </div>
-          <div className="bg-red-50 rounded-lg px-4 py-3 max-w-3xl border border-red-200 shadow-sm">
-            <div className="font-semibold text-red-800 mb-2">🚨 Emergency Simulation</div>
-            <div className="text-sm text-gray-700 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-1">
-                  <Clock size={14} />
-                  {sim.current_time || '11:40 PM'}
-                </span>
-                <span className={`font-bold ${sim.survival_probability > 0.5 ? 'text-green-600' : 'text-red-600'}`}>
-                  Survival: {(sim.survival_probability * 100).toFixed(0)}%
-                </span>
-              </div>
-              <p className="mt-2">{sim.message}</p>
-              {sim.next_event && sim.next_event.choices && (
-                <div className="mt-3 space-y-2">
-                  <div className="text-xs font-medium text-gray-500">Choose your action:</div>
-                  {sim.next_event.choices.map((choice) => (
-                    <button
-                      key={choice.id}
-                      onClick={() => handleSimulationDecision(choice.id)}
-                      className="block w-full text-left px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm transition-colors"
-                    >
-                      {choice.text}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {sim.complete && (
-                <div className={`mt-3 p-3 rounded-lg ${sim.survived ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  {sim.survived ? (
-                    <div className="flex items-center gap-2">
-                      <LifeBuoy size={20} />
-                      <span>🎉 You survived! Your choices saved your life.</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <XCircle size={20} />
-                      <span>💔 You did not survive. Your choices determined your fate.</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      );
-    }
-    
-    if (isError) {
-      return (
-        <motion.div
-          key={msg.id}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex items-start space-x-2 mb-4"
-        >
-          <div className="w-8 h-8 rounded-full bg-red-500 flex-shrink-0 flex items-center justify-center text-white text-sm font-bold">
-            <AlertCircle size={16} />
-          </div>
-          <div className="bg-red-50 rounded-lg px-4 py-3 border border-red-200 text-red-700 text-sm">
-            {msg.content}
-          </div>
-        </motion.div>
-      );
-    }
-    
-    return null;
+    });
+  };
+
+  // ── Avatar Config ──
+  const avatarConfig = {
+    user: { bg: 'bg-slate-700 dark:bg-slate-600', icon: <User size={16} /> },
+    error: { bg: 'bg-red-500', icon: <AlertCircle size={16} /> },
+    twin: { bg: 'bg-purple-500', icon: <Sparkles size={16} /> },
+    simulation: { bg: 'bg-amber-500', icon: <Waves size={16} /> },
+    sim_result: { bg: 'bg-green-500', icon: <LifeBuoy size={16} /> },
+    bot: { bg: 'bg-blue-600 dark:bg-blue-500', icon: <Bot size={16} /> }
   };
 
   return (
-    <div className="flex flex-col h-[700px] bg-gray-50 rounded-xl shadow-lg overflow-hidden border border-gray-200">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-              <Ship size={24} />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold">Titanic AI Assistant</h1>
-              <p className="text-sm opacity-80">Interactive Survival Predictor</p>
-            </div>
+    <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
+      
+      {/* ═══ HEADER ═══ */}
+      <header className="flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 z-20">
+        <div className="flex items-center gap-3">
+          {/* Ship Icon Badge */}
+          <div className="relative flex items-center justify-center w-10 h-10 bg-blue-600 dark:bg-amber-500 rounded-xl shadow-lg shadow-blue-600/20 dark:shadow-amber-500/20">
+            <Ship className="w-6 h-6 text-white" />
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse" />
           </div>
-          <div className="flex items-center space-x-2">
-            {prediction && (
-              <button
-                onClick={() => setShowShare(!showShare)}
-                className="px-3 py-1.5 bg-white/20 rounded-lg hover:bg-white/30 transition-colors text-xs flex items-center gap-1"
-              >
-                <Share2 size={14} />
-                Share
-              </button>
-            )}
-            {simulationActive && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 rounded-lg text-xs font-bold animate-pulse">
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                SIMULATION
-              </div>
-            )}
+          
+          <div>
+            <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+              Titanic AI
+              <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full uppercase tracking-wider">
+                Survival Engine
+              </span>
+            </h1>
+            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              <span>Historical Analysis Active</span>
+              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <span className="font-mono opacity-70">{fmtTime(new Date())}</span>
+            </div>
           </div>
         </div>
-      </div>
-      
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gradient-to-b from-gray-50 to-white">
-        <AnimatePresence>
-          {messages.map((msg) => renderMessage(msg))}
-        </AnimatePresence>
-        {typing && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-start space-x-2 mb-4"
-          >
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex-shrink-0 flex items-center justify-center text-white">
-              <Bot size={16} />
-            </div>
-            <div className="bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+
+        <button
+          onClick={() => handleSend('reset')}
+          className="p-2.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all active:scale-95"
+          title="New Session"
+        >
+          <RotateCcw size={18} />
+        </button>
+      </header>
+
+      {/* ═══ MESSAGES ═══ */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+        <AnimatePresence initial={false}>
+          {messages.map((msg) => {
+            const cfg = avatarConfig[msg.type] || avatarConfig.bot;
+            const isUser = msg.type === 'user';
+            
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 20, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
+              >
+                {/* Avatar */}
+                <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center shadow-md text-white ${cfg.bg}`}>
+                  {cfg.icon}
+                </div>
+
+                {/* Bubble */}
+                <div className={`max-w-[82%] md:max-w-[65%] ${isUser ? 'items-end' : 'items-start'}`}>
+                  <div className={`relative px-5 py-3.5 rounded-2xl shadow-sm ${
+                    isUser
+                      ? 'bg-blue-600 text-white rounded-br-md'
+                      : msg.type === 'error'
+                      ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800 rounded-bl-md'
+                      : msg.type === 'twin'
+                      ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-900 dark:text-purple-100 border border-purple-200 dark:border-purple-800 rounded-bl-md'
+                      : msg.type === 'simulation'
+                      ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100 border border-amber-200 dark:border-amber-800 rounded-bl-md'
+                      : msg.type === 'sim_result'
+                      ? 'bg-green-50 dark:bg-green-900/20 text-green-900 dark:text-green-100 border border-green-200 dark:border-green-800 rounded-bl-md'
+                      : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-bl-md'
+                  }`}>
+                    
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                      {renderText(msg.content)}
+                    </div>
+
+                    {/* Prediction Meter */}
+                    {msg.prediction && (
+                      <div className="mt-4 p-4 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                            Survival Probability
+                          </span>
+                          <span className={`text-xl font-black ${
+                            msg.prediction.probability > 0.6 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : msg.prediction.probability > 0.3
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {(msg.prediction.probability * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${msg.prediction.probability * 100}%` }}
+                            transition={{ duration: 1.2, ease: "easeOut" }}
+                            className={`h-full rounded-full ${
+                              msg.prediction.probability > 0.6 
+                                ? 'bg-green-500' 
+                                : msg.prediction.probability > 0.3
+                                ? 'bg-amber-500'
+                                : 'bg-red-500'
+                            }`}
+                          />
+                        </div>
+                        <p className="mt-2 text-xs font-semibold text-slate-600 dark:text-slate-400">
+                          Verdict: {msg.prediction.verdict?.icon} {msg.prediction.verdict?.label}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Simulation Choices */}
+                    {msg.simulation && !msg.simulation.complete && msg.simulation.current_scenario?.choices && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+                          Critical Decision
+                        </p>
+                        {msg.simulation.current_scenario.choices.map((choice) => (
+                          <button
+                            key={choice.id}
+                            onClick={() => handleSimChoice(choice.id)}
+                            disabled={loading}
+                            className="w-full group text-left px-4 py-3 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-slate-200 dark:border-slate-700 rounded-xl transition-all hover:border-blue-400 dark:hover:border-blue-600 hover:shadow-md disabled:opacity-40"
+                          >
+                            <div className="flex items-center gap-3">
+                              <ChevronRight size={14} className="text-blue-500 group-hover:translate-x-0.5 transition-transform" />
+                              <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{choice.text}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Simulation Result */}
+                    {msg.type === 'sim_result' && (
+                      <div className="mt-4 p-5 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
+                        <div className="text-5xl mb-3 animate-bounce">
+                          {msg.simulation?.survived ? '🛟' : '🌊'}
+                        </div>
+                        <h3 className="font-black text-xl text-slate-900 dark:text-white mb-1">
+                          {msg.simulation?.survived ? 'You Survived' : 'You Perished'}
+                        </h3>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Final survival probability: <span className="font-bold">{(msg.simulation?.survival_probability * 100).toFixed(0)}%</span>
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    {msg.actions?.length > 0 && !msg.simulation && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {msg.actions.map((action) => (
+                          <button
+                            key={action.id}
+                            onClick={() => handleAction(action)}
+                            disabled={loading}
+                            className="px-4 py-2.5 text-xs font-bold bg-slate-100 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-slate-700 dark:text-slate-300 hover:text-blue-700 dark:hover:text-blue-300 rounded-xl transition-all border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 disabled:opacity-40 active:scale-95"
+                          >
+                            {action.text}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <span className="text-[10px] text-slate-400 dark:text-slate-600 mt-1 px-1 block">
+                    {fmtTime(msg.timestamp)}
+                  </span>
+                </div>
+              </motion.div>
+            );
+          })}
+
+          {/* Typing Indicator */}
+          {typing && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex gap-3"
+            >
+              <div className="w-9 h-9 rounded-full bg-blue-600 dark:bg-blue-500 flex items-center justify-center shadow-md">
+                <Bot size={16} className="text-white" />
               </div>
-            </div>
-          </motion.div>
-        )}
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-bl-md px-5 py-4 shadow-sm">
+                <div className="flex gap-1.5">
+                  {[0, 0.15, 0.3].map((delay, i) => (
+                    <motion.div 
+                      key={i}
+                      animate={{ y: [0, -5, 0] }}
+                      transition={{ repeat: Infinity, duration: 0.6, delay }}
+                      className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full"
+                    />
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
-      
-      {/* Input */}
-      <div className="border-t border-gray-200 p-4 bg-white flex-shrink-0">
-        <div className="flex space-x-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type your response..."
-            className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm disabled:opacity-50"
-            disabled={loading}
-          />
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={loading}
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1"
-          >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-          </button>
-        </div>
-        <div className="mt-2 text-xs text-gray-400 text-center">
-          {step === 'welcome' && '🚢 Introduce yourself to begin'}
-          {step === 'interview' && '📝 Answer questions about your passenger profile'}
-          {step === 'complete' && '🎯 Prediction ready! Ask "what if" for alternatives'}
-          {simulationActive && '🚨 Emergency simulation in progress...'}
+
+      {/* ═══ INPUT ═══ */}
+      <div className="px-4 py-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 z-20">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-end gap-2 bg-slate-100 dark:bg-slate-800 rounded-2xl p-2 border border-slate-200 dark:border-slate-700 focus-within:ring-2 focus-within:ring-blue-500/30 focus-within:border-blue-500 transition-all shadow-sm">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={step === 'welcome' ? "Enter your name to begin..." : "Type your message..."}
+              disabled={loading || typing}
+              rows={1}
+              className="flex-1 bg-transparent border-0 px-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 resize-none focus:outline-none disabled:opacity-50 min-h-[44px]"
+            />
+            <button
+              onClick={() => handleSend()}
+              disabled={!input.trim() || loading || typing}
+              className="flex-shrink-0 p-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl transition-all shadow-lg shadow-blue-600/20 disabled:shadow-none hover:scale-105 active:scale-95 disabled:hover:scale-100"
+            >
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+            </button>
+          </div>
+          <p className="text-[10px] text-center text-slate-400 dark:text-slate-600 mt-2 tracking-wide">
+            RMS Titanic Survival Engine • AI-Powered Historical Simulation
+          </p>
         </div>
       </div>
     </div>
