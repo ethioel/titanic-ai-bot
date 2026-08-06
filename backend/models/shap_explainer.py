@@ -1,7 +1,3 @@
-"""
-SHAPExplainer + CounterfactualAnalyzer — production-grade explainability.
-Fits into: backend/models/shap_explainer.py
-"""
 from __future__ import annotations
 
 import logging
