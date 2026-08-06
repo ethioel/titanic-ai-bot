@@ -1,477 +1,486 @@
 import { NextResponse } from 'next/server';
-import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs';
 
-// Interview state management
+// ── Session Store (swap for Redis in production) ──
 const sessions = new Map();
 
+// ═══════════════════════════════════════════════════
+// SURVIVAL PREDICTION ENGINE
+// ═══════════════════════════════════════════════════
+function calculateProbability(data) {
+  let score = 0.38; // Base Titanic survival rate
+
+  // Class (deck access & lifeboat proximity)
+  if (data.pclass === 1) score += 0.22;
+  else if (data.pclass === 2) score += 0.08;
+  else score -= 0.05;
+
+  // Sex ("Women and children first")
+  if (data.sex === 'female') score += 0.32;
+  else score -= 0.18;
+
+  // Age
+  const age = Number(data.age);
+  if (age < 5) score += 0.15;
+  else if (age < 16) score += 0.10;
+  else if (age > 60) score -= 0.12;
+  else if (age > 45) score -= 0.05;
+
+  // Family size (coordination vs. burden)
+  const fam = Number(data.familySize) || 0;
+  if (fam >= 1 && fam <= 3) score += 0.05;
+  else if (fam > 4) score -= 0.10;
+  else if (fam === 0) score -= 0.02;
+
+  // Fare (correlates with cabin location)
+  const fare = Number(data.fare) || 0;
+  if (fare > 80) score += 0.04;
+  else if (fare < 10) score -= 0.03;
+
+  return Math.max(0.03, Math.min(0.97, score));
+}
+
+function getVerdict(prob) {
+  if (prob >= 0.75) return { label: 'Likely Survivor', icon: '🛟', color: 'green' };
+  if (prob >= 0.50) return { label: 'Moderate Chance', icon: '⚖️', color: 'amber' };
+  if (prob >= 0.30) return { label: 'Uncertain Fate', icon: '🌫️', color: 'orange' };
+  return { label: 'High Risk', icon: '🌊', color: 'red' };
+}
+
+// ═══════════════════════════════════════════════════
+// SMART NLP EXTRACTORS
+// ═══════════════════════════════════════════════════
+function extractName(msg) {
+  const cleaned = msg
+    .trim()
+    .replace(/^(hi|hello|hey|greetings|my name is|i am|call me|i'm|name[:\s]+|this is)\s+/i, '')
+    .replace(/[.!,]+$/, '')
+    .trim();
+  return cleaned.length >= 1 && cleaned.length < 50 && !/^\d+$/.test(cleaned) ? cleaned : null;
+}
+
+function extractAge(msg) {
+  // ── FIX: Multiple fallbacks so "25" or "I am 25" both work ──
+  const patterns = [
+    /(?:age|aged|i am|i'm)\s+(\d{1,3})/i,
+    /(\d{1,3})\s*(?:years?|yrs?|yo|y\.o\.)/i,
+    /\b(\d{1,3})\b/ // bare number fallback
+  ];
+  for (const p of patterns) {
+    const m = msg.match(p);
+    if (m) {
+      const v = parseInt(m[1], 10);
+      if (v >= 0 && v <= 120) return v;
+    }
+  }
+  return null;
+}
+
+function extractSex(msg) {
+  const m = msg.toLowerCase();
+  if (/\b(female|woman|girl|lady|she|miss|mrs|ms|♀|f)\b/.test(m)) return 'female';
+  if (/\b(male|man|boy|gentleman|he|mr|sir|♂|m)\b/.test(m)) return 'male';
+  return null;
+}
+
+function extractClass(msg) {
+  const m = msg.toLowerCase();
+  if (/\b(first|1st|suite|luxury|premium)\b/.test(m) || msg === '1') return 1;
+  if (/\b(second|2nd|standard)\b/.test(m) || msg === '2') return 2;
+  if (/\b(third|3rd|steerage|economy)\b/.test(m) || msg === '3') return 3;
+  const n = msg.match(/\b([123])\b/);
+  if (n) return parseInt(n[1]);
+  return null;
+}
+
+function extractEmbarked(msg) {
+  const m = msg.toLowerCase();
+  if (/\b(southampton|south)\b/.test(m) || msg.toUpperCase() === 'S') return 'S';
+  if (/\b(cherbourg)\b/.test(m) || msg.toUpperCase() === 'C') return 'C';
+  if (/\b(queenstown|queens|cobh)\b/.test(m) || msg.toUpperCase() === 'Q') return 'Q';
+  const c = msg.match(/\b([sqc])\b/i);
+  if (c) return c[1].toUpperCase();
+  return null;
+}
+
+function extractFamily(msg) {
+  const m = msg.toLowerCase();
+  if (/\b(alone|by myself|nobody|no one|zero|0)\b/.test(m)) {
+    return { sibSp: 0, parch: 0, familySize: 0 };
+  }
+  const nums = msg.match(/\d+/g);
+  if (nums && nums.length >= 2) {
+    return {
+      sibSp: parseInt(nums[0]),
+      parch: parseInt(nums[1]),
+      familySize: parseInt(nums[0]) + parseInt(nums[1])
+    };
+  }
+  if (nums && nums.length === 1) {
+    return { sibSp: parseInt(nums[0]), parch: 0, familySize: parseInt(nums[0]) };
+  }
+  return null;
+}
+
+function extractFare(msg) {
+  const match = msg.match(/(\d+(?:\.\d+)?)/);
+  if (match) {
+    const v = parseFloat(match[1]);
+    if (v >= 0 && v <= 1000) return v;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════
+// MAIN HANDLER
+// ═══════════════════════════════════════════════════
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { 
-      session_id, 
-      message, 
-      step = 'welcome', 
-      passenger_data = {} 
-    } = body;
+    const { session_id, message, passenger_data: clientData } = body;
 
-    // Initialize session if new
-    if (!sessions.has(session_id)) {
-      sessions.set(session_id, {
-        step: 'welcome',
+    if (!session_id) {
+      return NextResponse.json({ error: 'Session ID required' }, { status: 400 });
+    }
+
+    // ── Get or init session ──
+    let session = sessions.get(session_id);
+    if (!session) {
+      session = { step: 'welcome', data: {}, history: [] };
+      sessions.set(session_id, session);
+    }
+
+    // Merge any client-side data
+    if (clientData && typeof clientData === 'object') {
+      Object.assign(session.data, clientData);
+    }
+
+    const input = String(message || '').trim();
+    const data = session.data;
+    let step = session.step;
+
+    // ── Global Reset ──
+    if (/^(reset|restart|start over|new|begin again)$/i.test(input)) {
+      session.step = 'welcome';
+      session.data = {};
+      session.history = [];
+      return NextResponse.json({
+        message: 'Session reset. **Welcome aboard the RMS Titanic.** Please tell me your name.',
+        step: 'name',
         passenger_data: {},
-        history: [],
-        created: new Date()
+        actions: []
       });
     }
 
-    const session = sessions.get(session_id);
-    session.history.push({ role: 'user', content: message, timestamp: new Date() });
+    let response = {};
 
-    // Process interview flow
-    let response = await processInterview(message, step, passenger_data, session);
+    // ═══════════════════════════════════════════════
+    // STATE MACHINE
+    // ═══════════════════════════════════════════════
+    switch (step) {
+      // ── WELCOME ──
+      // The frontend already shows a welcome bubble.
+      // We treat the user's FIRST message as their name directly.
+      case 'welcome': {
+        const name = extractName(input);
+        if (name) {
+          data.name = name;
+          session.step = 'gender';
+          response = {
+            message: `Welcome aboard, **${name}**! Please state your gender.`,
+            step: 'gender',
+            passenger_data: data,
+            actions: [
+              { id: 'sex_male', text: '♂️ Male' },
+              { id: 'sex_female', text: '♀️ Female' }
+            ]
+          };
+        } else {
+          session.step = 'name';
+          response = {
+            message: 'Welcome aboard! Please tell me your name for the passenger manifest.',
+            step: 'name',
+            passenger_data: data,
+            actions: []
+          };
+        }
+        break;
+      }
 
-    // Update session
-    session.step = response.step || step;
-    session.passenger_data = response.passenger_data || passenger_data;
-    session.history.push({ role: 'assistant', content: response.message, timestamp: new Date() });
+      // ── NAME ──
+      case 'name': {
+        const name = extractName(input);
+        if (!name) {
+          response = {
+            message: 'Please provide a valid name (letters only, max 50 characters).',
+            step: 'name',
+            passenger_data: data,
+            actions: []
+          };
+        } else {
+          data.name = name;
+          session.step = 'gender';
+          response = {
+            message: `Thank you, **${name}**. Please state your gender.`,
+            step: 'gender',
+            passenger_data: data,
+            actions: [
+              { id: 'sex_male', text: '♂️ Male' },
+              { id: 'sex_female', text: '♀️ Female' }
+            ]
+          };
+        }
+        break;
+      }
+
+      // ── GENDER ──
+      case 'gender': {
+        const sex = extractSex(input);
+        if (!sex) {
+          response = {
+            message: "I didn't catch that. Please specify **Male** or **Female**.",
+            step: 'gender',
+            passenger_data: data,
+            actions: [
+              { id: 'sex_male', text: '♂️ Male' },
+              { id: 'sex_female', text: '♀️ Female' }
+            ]
+          };
+        } else {
+          data.sex = sex;
+          session.step = 'age';
+          response = {
+            message: `Gender recorded. How old are you?\n\nValid range: **0–120 years**.`,
+            step: 'age',
+            passenger_data: data,
+            actions: []
+          };
+        }
+        break;
+      }
+
+      // ── AGE ──
+      case 'age': {
+        const age = extractAge(input);
+        if (age === null) {
+          response = {
+            message: '⚠️ **Invalid age.** Please enter a numeric age between **0 and 120**.',
+            step: 'age',
+            passenger_data: data,
+            actions: []
+          };
+        } else {
+          data.age = age;
+          session.step = 'class';
+          response = {
+            message: `Age **${age}** recorded. Which passenger class is your ticket?`,
+            step: 'class',
+            passenger_data: data,
+            actions: [
+              { id: 'class_1', text: '🥇 First Class' },
+              { id: 'class_2', text: '🥈 Second Class' },
+              { id: 'class_3', text: '🥉 Third Class' }
+            ]
+          };
+        }
+        break;
+      }
+
+      // ── CLASS ──
+      case 'class': {
+        const pclass = extractClass(input);
+        if (!pclass) {
+          response = {
+            message: 'Please specify a valid class: **First (1)**, **Second (2)**, or **Third (3)**.',
+            step: 'class',
+            passenger_data: data,
+            actions: [
+              { id: 'class_1', text: '🥇 First Class' },
+              { id: 'class_2', text: '🥈 Second Class' },
+              { id: 'class_3', text: '🥉 Third Class' }
+            ]
+          };
+        } else {
+          data.pclass = pclass;
+          session.step = 'embarked';
+          const names = { 1: '1st Class', 2: '2nd Class', 3: '3rd Class' };
+          response = {
+            message: `${names[pclass]}. Which port did you embark from?\n\n**S** — Southampton\n**C** — Cherbourg\n**Q** — Queenstown`,
+            step: 'embarked',
+            passenger_data: data,
+            actions: [
+              { id: 'embark_S', text: 'S — Southampton' },
+              { id: 'embark_C', text: 'C — Cherbourg' },
+              { id: 'embark_Q', text: 'Q — Queenstown' }
+            ]
+          };
+        }
+        break;
+      }
+
+      // ── EMBARKED ──
+      case 'embarked': {
+        const embarked = extractEmbarked(input);
+        if (!embarked) {
+          response = {
+            message: 'Please enter **S** (Southampton), **C** (Cherbourg), or **Q** (Queenstown).',
+            step: 'embarked',
+            passenger_data: data,
+            actions: [
+              { id: 'embark_S', text: 'S — Southampton' },
+              { id: 'embark_C', text: 'C — Cherbourg' },
+              { id: 'embark_Q', text: 'Q — Queenstown' }
+            ]
+          };
+        } else {
+          data.embarked = embarked;
+          session.step = 'family';
+          const ports = { S: 'Southampton', C: 'Cherbourg', Q: 'Queenstown' };
+          response = {
+            message: `Embarked from **${ports[embarked]}**. How many family members are traveling with you?\n\nEnter two numbers (siblings/spouses, parents/children) e.g. **"1 2"**, or say **"alone"**.`,
+            step: 'family',
+            passenger_data: data,
+            actions: [
+              { id: 'fam_0', text: '0 — Traveling alone' },
+              { id: 'fam_1', text: '1 family member' },
+              { id: 'fam_2', text: '2 family members' },
+              { id: 'fam_3', text: '3+ family members' }
+            ]
+          };
+        }
+        break;
+      }
+
+      // ── FAMILY ──
+      case 'family': {
+        const fam = extractFamily(input);
+        if (!fam) {
+          response = {
+            message: 'Please enter valid family numbers (e.g. **1 0**) or say **alone**.',
+            step: 'family',
+            passenger_data: data,
+            actions: [
+              { id: 'fam_0', text: '0 — Traveling alone' },
+              { id: 'fam_1', text: '1 family member' },
+              { id: 'fam_2', text: '2 family members' },
+              { id: 'fam_3', text: '3+ family members' }
+            ]
+          };
+        } else {
+          Object.assign(data, fam);
+          session.step = 'fare';
+          response = {
+            message:
+              fam.familySize === 0
+                ? `Traveling alone. Final question: What was your ticket fare in **pounds (£)**?\n\nTypical: £3–£30 (Third), £10–£60 (Second), £30+ (First).`
+                : `Family of **${fam.familySize}** recorded. Final question: What was your ticket fare in **pounds (£)**?`,
+            step: 'fare',
+            passenger_data: data,
+            actions: []
+          };
+        }
+        break;
+      }
+
+      // ── FARE ──
+      case 'fare': {
+        let fare = extractFare(input);
+        if (fare === null) {
+          // Smart default based on class so the flow never breaks
+          fare = data.pclass === 1 ? 60 : data.pclass === 2 ? 20 : 8;
+        }
+        data.fare = fare;
+        session.step = 'complete';
+
+        const prob = calculateProbability(data);
+        const verdict = getVerdict(prob);
+
+        response = {
+          message: `## Survival Analysis Complete\n\n**Passenger:** ${data.name}\n**Profile:** ${data.age} years, ${data.sex}, Class ${data.pclass}, ${data.familySize === 0 ? 'alone' : data.familySize + ' family members'}\n\n**Base Survival Probability: ${(prob * 100).toFixed(0)}%** ${verdict.icon} *${verdict.label}*\n\nYour profile has been analyzed against 1912 historical data. What would you like to do?`,
+          step: 'complete',
+          passenger_data: data,
+          prediction: { probability: prob, verdict },
+          actions: [
+            { id: 'show_twin', text: '🔍 Find Historical Twin' },
+            { id: 'start_simulation', text: '🚨 Run Survival Simulation' },
+            { id: 'reset', text: '🔄 Start Over' }
+          ]
+        };
+        break;
+      }
+
+      // ── COMPLETE / ACTION MENU ──
+      case 'complete': {
+        const low = input.toLowerCase();
+        const prob = calculateProbability(data);
+        const verdict = getVerdict(prob);
+
+        if (low.match(/twin|historical|match/)) {
+          response = {
+            message: '🔍 Searching the passenger manifest archives for your historical twin...',
+            step: 'complete',
+            passenger_data: data,
+            prediction: { probability: prob, verdict },
+            action: 'show_twin'
+          };
+        } else if (low.match(/simulat|emergency|scenario|run/)) {
+          response = {
+            message: '🚨 **Emergency Simulation Initializing...**\n\nThe iceberg has been sighted. Your survival instincts will be tested.',
+            step: 'complete',
+            passenger_data: data,
+            prediction: { probability: prob, verdict },
+            action: 'start_simulation'
+          };
+        } else if (low.match(/predict|chance|probability|analysis/)) {
+          response = {
+            message: `📊 **${data.name}**, your survival probability is **${(prob * 100).toFixed(0)}%**.\n\n${verdict.icon} **${verdict.label}**\n\n${prob > 0.5 ? 'Your profile aligns with historical survivors.' : 'Your profile faces significant challenges based on 1912 data.'}`,
+            step: 'complete',
+            passenger_data: data,
+            prediction: { probability: prob, verdict },
+            actions: [
+              { id: 'show_twin', text: '🔍 Find Historical Twin' },
+              { id: 'start_simulation', text: '🚨 Run Survival Simulation' },
+              { id: 'reset', text: '🔄 Start Over' }
+            ]
+          };
+        } else {
+          response = {
+            message: 'Please choose an action below, or type **reset** to start over.',
+            step: 'complete',
+            passenger_data: data,
+            prediction: { probability: prob, verdict },
+            actions: [
+              { id: 'show_twin', text: '🔍 Find Historical Twin' },
+              { id: 'start_simulation', text: '🚨 Run Survival Simulation' },
+              { id: 'reset', text: '🔄 Start Over' }
+            ]
+          };
+        }
+        break;
+      }
+
+      // ── Fallback ──
+      default: {
+        session.step = 'welcome';
+        response = {
+          message: "Let's start over. **Welcome aboard!** Please tell me your name.",
+          step: 'name',
+          passenger_data: data,
+          actions: []
+        };
+      }
+    }
+
+    // ── Persist session ──
+    session.history.push({ role: 'user', content: input, time: Date.now() });
+    session.history.push({ role: 'bot', content: response.message, time: Date.now() });
     sessions.set(session_id, session);
 
-    return NextResponse.json({
-      message: response.message,
-      step: response.step,
-      passenger_data: response.passenger_data,
-      actions: response.actions || [],
-      prediction: response.prediction || null,
-      twin: response.twin || null,
-      action: response.action || null
-    });
-
+    return NextResponse.json(response);
   } catch (error) {
-    console.error('Interview error:', error);
+    console.error('Interview API Error:', error);
     return NextResponse.json(
-      { error: error.message },
+      { error: 'Engine failure', message: '⚠️ The bridge is experiencing technical difficulties. Please try again.' },
       { status: 500 }
     );
   }
-}
-
-async function processInterview(message, step, passengerData, session) {
-  // Extract passenger info from message
-  const extracted = extractPassengerInfo(message, passengerData);
-
-  switch (step) {
-    case 'welcome':
-      return handleWelcome(message, passengerData);
-    
-    case 'name':
-      return handleName(message, passengerData);
-    
-    case 'gender':
-      return handleGender(message, passengerData);
-    
-    case 'age':
-      return handleAge(message, passengerData);
-    
-    case 'class':
-      return handleClass(message, passengerData);
-    
-    case 'embarked':
-      return handleEmbarked(message, passengerData);
-    
-    case 'family':
-      return handleFamily(message, passengerData);
-    
-    case 'fare':
-      return handleFare(message, passengerData);
-    
-    case 'complete':
-      return handleComplete(message, passengerData, session);
-    
-    default:
-      return {
-        message: "I'm not sure I understand. Let's continue with your passenger registration.",
-        step: 'name'
-      };
-  }
-}
-
-function extractPassengerInfo(message, currentData) {
-  const data = { ...currentData };
-  
-  // Extract name
-  const nameMatch = message.match(/my name is ([a-zA-Z\s]+)/i) || 
-                    message.match(/i am ([a-zA-Z\s]+)/i);
-  if (nameMatch && !data.name) {
-    data.name = nameMatch[1].trim();
-  }
-
-  // Extract gender
-  if (message.match(/male|man|gentleman|mister|mr/i)) {
-    data.Sex = 'male';
-  } else if (message.match(/female|woman|lady|miss|mrs/i)) {
-    data.Sex = 'female';
-  }
-
-  // Extract age
-  const ageMatch = message.match(/(\d+)\s*(?:years?|yrs?|yo)/i);
-  if (ageMatch) {
-    data.Age = parseInt(ageMatch[1]);
-  }
-
-  // Extract class
-  if (message.match(/first|1st|1 class|suite|luxury|premium/i)) {
-    data.Pclass = 1;
-  } else if (message.match(/second|2nd|2 class|standard/i)) {
-    data.Pclass = 2;
-  } else if (message.match(/third|3rd|3 class|steerage|economy/i)) {
-    data.Pclass = 3;
-  }
-
-  // Extract embarked
-  if (message.match(/southampton|south|s\b/i)) {
-    data.Embarked = 'S';
-  } else if (message.match(/cherbourg|c\b/i)) {
-    data.Embarked = 'C';
-  } else if (message.match(/queenstown|q\b/i)) {
-    data.Embarked = 'Q';
-  }
-
-  return data;
-}
-
-function handleWelcome(message, passengerData) {
-  return {
-    message: `Welcome aboard, traveler! I'm your historical guide for this journey.
-
-I'll help you create your passenger profile, then analyze your survival chances, find your historical twin, and run a real-time emergency simulation.
-
-Let's start with some basic questions. What is your name?`,
-    step: 'name',
-    passenger_data: passengerData
-  };
-}
-
-function handleName(message, passengerData) {
-  const name = message.trim();
-  if (name.toLowerCase() === 'skip') {
-    passengerData.name = 'Anonymous Passenger';
-  } else {
-    passengerData.name = name;
-  }
-
-  return {
-    message: `Nice to meet you, ${passengerData.name}! 
-
-Next question: Are you male or female?`,
-    step: 'gender',
-    passenger_data: passengerData
-  };
-}
-
-function handleGender(message, passengerData) {
-  const data = extractPassengerInfo(message, passengerData);
-  
-  if (!data.Sex) {
-    return {
-      message: "I didn't catch that. Are you male or female?",
-      step: 'gender',
-      passenger_data: passengerData
-    };
-  }
-
-  const genderDisplay = data.Sex === 'male' ? 'male' : 'female';
-  return {
-    message: `Thank you. You're a ${genderDisplay} passenger.
-
-How old are you?`,
-    step: 'age',
-    passenger_data: { ...passengerData, ...data }
-  };
-}
-
-function handleAge(message, passengerData) {
-  const data = extractPassengerInfo(message, passengerData);
-  
-  if (!data.Age || data.Age < 0 || data.Age > 120) {
-    return {
-      message: "Please enter a valid age (0-120).",
-      step: 'age',
-      passenger_data: passengerData
-    };
-  }
-
-  return {
-    message: `Age ${data.Age}. Understood.
-
-Which ticket class are you traveling in?
-- 1st Class (Luxury)
-- 2nd Class (Standard)
-- 3rd Class (Economy)`,
-    step: 'class',
-    passenger_data: { ...passengerData, ...data }
-  };
-}
-
-function handleClass(message, passengerData) {
-  const data = extractPassengerInfo(message, passengerData);
-  
-  if (!data.Pclass) {
-    return {
-      message: "Please select a class: 1st, 2nd, or 3rd.",
-      step: 'class',
-      passenger_data: passengerData
-    };
-  }
-
-  const classNames = { 1: '1st Class', 2: '2nd Class', 3: '3rd Class' };
-  
-  return {
-    message: `${classNames[data.Pclass]}. Excellent.
-
-Which port did you embark from?
-- S (Southampton)
-- C (Cherbourg)
-- Q (Queenstown)`,
-    step: 'embarked',
-    passenger_data: { ...passengerData, ...data }
-  };
-}
-
-function handleEmbarked(message, passengerData) {
-  const data = extractPassengerInfo(message, passengerData);
-  
-  if (!data.Embarked) {
-    return {
-      message: "Please enter S, C, or Q for your embarkation port.",
-      step: 'embarked',
-      passenger_data: passengerData
-    };
-  }
-
-  const portNames = { S: 'Southampton', C: 'Cherbourg', Q: 'Queenstown' };
-
-  return {
-    message: `You embarked from ${portNames[data.Embarked]}.
-
-How many family members are traveling with you?
-- Siblings/Spouses: 0-10
-- Parents/Children: 0-10`,
-    step: 'family',
-    passenger_data: { ...passengerData, ...data }
-  };
-}
-
-function handleFamily(message, passengerData) {
-  // Extract family numbers
-  const numbers = message.match(/\d+/g);
-  let sibsp = 0;
-  let parch = 0;
-
-  if (numbers && numbers.length >= 2) {
-    sibsp = parseInt(numbers[0]);
-    parch = parseInt(numbers[1]);
-  } else if (numbers && numbers.length === 1) {
-    sibsp = parseInt(numbers[0]);
-  }
-
-  // Also try to parse from text
-  if (message.match(/no family|alone|by myself/i)) {
-    sibsp = 0;
-    parch = 0;
-  }
-
-  const data = { ...passengerData, SibSp: sibsp, Parch: parch };
-
-  return {
-    message: `Family: ${sibsp} siblings/spouses, ${parch} parents/children.
-
-Finally, what was your ticket fare? (in pounds)`,
-    step: 'fare',
-    passenger_data: data
-  };
-}
-
-function handleFare(message, passengerData) {
-  const fareMatch = message.match(/(\d+(?:\.\d+)?)/);
-  let fare = 32;
-
-  if (fareMatch) {
-    fare = parseFloat(fareMatch[1]);
-  }
-
-  const data = { ...passengerData, Fare: fare };
-
-  // Complete profile
-  return {
-    message: `✅ Profile complete! Thank you, ${data.name || 'passenger'}.
-
-Here's your passenger summary:
-- Name: ${data.name || 'Anonymous'}
-- Gender: ${data.Sex}
-- Age: ${data.Age}
-- Class: ${['', '1st', '2nd', '3rd'][data.Pclass]}
-- Embarked: ${data.Embarked}
-- Family: ${data.SibSp + data.Parch} members
-- Fare: £${data.Fare}
-
-Would you like me to:
-1. 🔮 Predict your survival chances
-2. 👥 Find your historical twin
-3. 🚨 Start emergency simulation
-4. 🔄 All of the above`,
-    step: 'complete',
-    passenger_data: data,
-    actions: [
-      { id: 'predict', text: '🔮 Predict Survival' },
-      { id: 'twin', text: '👥 Find Historical Twin' },
-      { id: 'simulate', text: '🚨 Start Simulation' },
-      { id: 'all', text: '🔄 Do Everything' }
-    ]
-  };
-}
-
-async function handleComplete(message, passengerData, session) {
-  const action = message.toLowerCase();
-  
-  // Check for action keywords
-  if (action.includes('predict') || action.includes('chance') || action.includes('survival')) {
-    // Trigger prediction
-    const prediction = await getPrediction(passengerData);
-    return {
-      message: generatePredictionMessage(prediction, passengerData),
-      step: 'complete',
-      passenger_data: passengerData,
-      prediction: prediction,
-      action: 'show_prediction'
-    };
-  }
-
-  if (action.includes('twin') || action.includes('historical') || action.includes('match')) {
-    const twin = await getHistoricalTwin(passengerData);
-    return {
-      message: "I've found your historical twin!",
-      step: 'complete',
-      passenger_data: passengerData,
-      twin: twin,
-      action: 'show_twin'
-    };
-  }
-
-  if (action.includes('simulate') || action.includes('emergency') || action.includes('sim')) {
-    return {
-      message: "🚨 Starting emergency simulation...",
-      step: 'complete',
-      passenger_data: passengerData,
-      action: 'start_simulation'
-    };
-  }
-
-  if (action.includes('all') || action.includes('everything')) {
-    return {
-      message: "🔄 Running full analysis...",
-      step: 'complete',
-      passenger_data: passengerData,
-      action: 'do_everything'
-    };
-  }
-
-  return {
-    message: "What would you like to do? Choose from: Predict, Twin, Simulate, or All.",
-    step: 'complete',
-    passenger_data: passengerData
-  };
-}
-
-// Helper functions (simplified versions)
-async function getPrediction(passengerData) {
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/bot/predict`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(passengerData)
-    });
-    return await response.json();
-  } catch {
-    // Fallback prediction
-    const prob = calculateFallbackProbability(passengerData);
-    return {
-      survived: prob > 0.5,
-      probability: prob,
-      confidence: Math.abs(prob - 0.5) * 2
-    };
-  }
-}
-
-function calculateFallbackProbability(data) {
-  let prob = 0.38; // Base survival rate
-  
-  // Class factor
-  if (data.Pclass === 1) prob += 0.25;
-  else if (data.Pclass === 2) prob += 0.1;
-  else prob -= 0.05;
-  
-  // Gender factor
-  if (data.Sex === 'female') prob += 0.3;
-  else prob -= 0.2;
-  
-  // Age factor
-  if (data.Age < 12) prob += 0.15;
-  else if (data.Age < 30) prob += 0.05;
-  else if (data.Age > 60) prob -= 0.1;
-  
-  // Family factor
-  const family = (data.SibSp || 0) + (data.Parch || 0);
-  if (family >= 1 && family <= 3) prob += 0.05;
-  else if (family > 4) prob -= 0.05;
-  
-  return Math.max(0, Math.min(1, prob));
-}
-
-async function getHistoricalTwin(passengerData) {
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/bot/twin`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(passengerData)
-    });
-    return await response.json();
-  } catch {
-    return { 
-      name: 'Rose DeWitt Bukater', 
-      similarity: 0.72,
-      survived: true,
-      narrative: "Your historical twin is Rose DeWitt Bukater, a 17-year-old 1st Class passenger who survived the sinking. Like you, she was traveling in luxury with her family. She was known for her courage and determination."
-    };
-  }
-}
-
-function generatePredictionMessage(prediction, data) {
-  const prob = prediction.probability;
-  const survived = prediction.survived;
-  
-  let message = `📊 **Survival Prediction**
-  
-Based on your passenger profile, your survival probability is **${(prob * 100).toFixed(1)}%**.
-
-`;
-
-  if (survived) {
-    message += `✅ **You would likely survive!** Your profile matches survivors who had better access to lifeboats.`;
-  } else {
-    message += `❌ **You would likely not survive.** Your profile matches passengers who had limited access to lifeboats.`;
-  }
-
-  // Add specific factors
-  const factors = [];
-  if (data.Sex === 'female') factors.push('women were prioritized');
-  if (data.Pclass === 1 || data.Pclass === 2) factors.push('higher class had better access');
-  if ((data.SibSp || 0) + (data.Parch || 0) <= 3) factors.push('small families had better survival');
-
-  if (factors.length > 0) {
-    message += `\n\nKey factors: ${factors.join(', ')}.`;
-  }
-
-  return message;
 }
