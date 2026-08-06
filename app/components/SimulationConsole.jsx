@@ -1,474 +1,331 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  AlertCircle, 
-  Clock, 
   Ship, 
-  User, 
-  Users, 
+  Heart, 
+  Thermometer, 
+  Battery, 
+  MapPin, 
+  Activity,
+  AlertTriangle,
+  Clock,
+  Shield,
+  Backpack,
+  Users,
   ChevronRight,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  Play,
-  Pause,
-  RotateCcw
+  RotateCcw,
+  Waves
 } from 'lucide-react';
 
-export default function SimulationConsole({ 
-  passengerData, 
-  initialProbability = 0.5,
-  onComplete,
-  className = '' 
-}) {
-  const [simulation, setSimulation] = useState(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [currentEvent, setCurrentEvent] = useState(null);
-  const [decisions, setDecisions] = useState([]);
-  const [survivalProbability, setSurvivalProbability] = useState(initialProbability);
-  const [logs, setLogs] = useState([]);
-  const [isComplete, setIsComplete] = useState(false);
-  const [survived, setSurvived] = useState(false);
-  
-  const logEndRef = useRef(null);
-  const timerRef = useRef(null);
+export default function SimulationConsole({ passengerData, initialProbability = 0.5 }) {
+  const [simState, setSimState] = useState(null);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState([]);
 
-  // Timeline events
-  const timeline = [
-    {
-      id: 'impact',
-      time: '11:40 PM',
-      minutes: 0,
-      event: 'Titanic strikes iceberg',
-      description: 'The ship has struck an iceberg on the starboard side. Water begins entering the forward compartments.',
-      choices: null
-    },
-    {
-      id: 'response',
-      time: '11:45 PM',
-      minutes: 5,
-      event: 'Crew assesses damage',
-      description: 'The crew is assessing the damage. Passengers are beginning to notice the ship listing to starboard.',
-      choices: [
-        { id: 'go_upper', text: 'Head to the upper deck immediately', modifier: 0.05, description: 'Get to the boat deck early' },
-        { id: 'stay_cabin', text: 'Go back to your cabin for belongings', modifier: -0.08, description: 'Retrieve valuables' },
-        { id: 'help_others', text: 'Help others in your area', modifier: 0.02, description: 'Assist fellow passengers' }
-      ]
-    },
-    {
-      id: 'lifeboats',
-      time: '11:50 PM',
-      minutes: 10,
-      event: 'Lifeboats prepared',
-      description: 'Lifeboats are being prepared for launch. Women and children are being prioritized.',
-      choices: [
-        { id: 'rush_lifeboat', text: 'Rush to the lifeboat station', modifier: 0.12, description: 'Try to board early' },
-        { id: 'help_launch', text: 'Assist with lifeboat preparation', modifier: 0.05, description: 'Help the crew' },
-        { id: 'wait', text: 'Wait for official instructions', modifier: -0.05, description: 'Follow procedure' }
-      ]
-    },
-    {
-      id: 'panic',
-      time: '11:55 PM',
-      minutes: 15,
-      event: 'Panic spreads',
-      description: 'The ship is listing more severely. Panic is spreading among passengers.',
-      choices: [
-        { id: 'stay_calm', text: 'Stay calm and follow procedures', modifier: 0.03, description: 'Maintain composure' },
-        { id: 'panic', text: 'Panic and push towards lifeboats', modifier: -0.08, description: 'React emotionally' },
-        { id: 'help', text: 'Help others remain calm', modifier: 0.02, description: 'Be a leader' }
-      ]
-    },
-    {
-      id: 'launch',
-      time: '12:00 AM',
-      minutes: 20,
-      event: 'Lifeboats launching',
-      description: 'Lifeboats are being launched. Many are only half full.',
-      choices: [
-        { id: 'board', text: 'Board a lifeboat if possible', modifier: 0.15, description: 'Take the opportunity' },
-        { id: 'stay', text: 'Stay on the ship', modifier: -0.20, description: 'Remain on deck' },
-        { id: 'help_launch2', text: 'Help launch more lifeboats', modifier: 0.03, description: 'Assist with loading' }
-      ]
-    },
-    {
-      id: 'final',
-      time: '12:15 AM',
-      minutes: 35,
-      event: 'Final moments',
-      description: 'The ship is sinking rapidly. Final decisions must be made.',
-      choices: [
-        { id: 'jump', text: 'Jump into the water', modifier: -0.10, description: 'Take your chances in the water' },
-        { id: 'stay_until_end', text: 'Stay on the ship until the end', modifier: -0.15, description: 'Face the inevitable' },
-        { id: 'find_raft', text: 'Find debris to hold onto', modifier: 0.08, description: 'Look for flotsam' }
-      ]
+  const startSimulation = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/bot/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'start', 
+          passenger_data: passengerData || { Pclass: 2, Sex: 'male', Age: 30, Fare: 13 } 
+        }),
+      });
+      const data = await res.json();
+      setSimState(data.state);
+      setResult(data);
+      setHistory([]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  }, [passengerData]);
 
-  useEffect(() => {
-    // Auto-scroll logs
-    if (logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [logs]);
-
-  useEffect(() => {
-    if (isRunning && !isPaused && timerRef.current) {
-      // Auto-advance if no choices available
-      if (currentEvent && !currentEvent.choices) {
-        const timeout = setTimeout(() => {
-          advanceEvent();
-        }, 3000);
-        return () => clearTimeout(timeout);
+  const makeDecision = useCallback(async (decisionId) => {
+    if (!simState) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/bot/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decide', decision_id: decisionId, state: simState }),
+      });
+      const data = await res.json();
+      if (data.state) {
+        setHistory(prev => [...prev, result]);
+        setSimState(data.state);
+        setResult(data);
       }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-  }, [isRunning, isPaused, currentEvent]);
+  }, [simState, result]);
 
-  const startSimulation = () => {
-    setIsRunning(true);
-    setIsPaused(false);
-    setDecisions([]);
-    setLogs([]);
-    setSurvivalProbability(initialProbability);
-    setIsComplete(false);
-    setSurvived(false);
-    
-    // Start from first event
-    const firstEvent = timeline[0];
-    setCurrentEvent(firstEvent);
-    addLog('info', `🚨 Emergency simulation started at ${firstEvent.time}`);
-    addLog('info', firstEvent.description);
-  };
+  if (!result) {
+    return (
+      <div className="glass-strong rounded-2xl p-12 text-center">
+        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center">
+          <Ship size={32} className="text-blue-500" />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Emergency Simulation</h2>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+          Experience the sinking in real-time. Make decisions that determine your fate based on your passenger profile.
+        </p>
+        <button onClick={startSimulation} className="btn-primary text-base px-8 py-4">
+          <AlertTriangle size={18} />
+          Begin Emergency Protocol
+        </button>
+      </div>
+    );
+  }
 
-  const pauseSimulation = () => {
-    setIsPaused(true);
-    addLog('info', '⏸️ Simulation paused');
-  };
-
-  const resumeSimulation = () => {
-    setIsPaused(false);
-    addLog('info', '▶️ Simulation resumed');
-  };
-
-  const resetSimulation = () => {
-    setIsRunning(false);
-    setIsPaused(false);
-    setCurrentEvent(null);
-    setDecisions([]);
-    setLogs([]);
-    setSurvivalProbability(initialProbability);
-    setIsComplete(false);
-    setSurvived(false);
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
-  };
-
-  const makeDecision = (choice) => {
-    // Apply modifier
-    const newProbability = Math.max(0, Math.min(1, survivalProbability + choice.modifier));
-    setSurvivalProbability(newProbability);
-    
-    // Record decision
-    const decision = {
-      ...choice,
-      time: currentEvent.time,
-      newProbability: newProbability
-    };
-    setDecisions(prev => [...prev, decision]);
-    
-    addLog('decision', `Decision: ${choice.text}`);
-    addLog('info', `Survival probability: ${(newProbability * 100).toFixed(1)}% ${choice.modifier > 0 ? '⬆️' : '⬇️'}`);
-    
-    // Advance to next event
-    advanceEvent();
-  };
-
-  const advanceEvent = () => {
-    const currentIndex = timeline.findIndex(e => e.id === currentEvent?.id);
-    const nextIndex = currentIndex + 1;
-    
-    if (nextIndex >= timeline.length) {
-      // Simulation complete
-      const finalSurvived = survivalProbability > 0.5;
-      setSurvived(finalSurvived);
-      setIsComplete(true);
-      setIsRunning(false);
-      
-      addLog('result', finalSurvived ? '🎉 You survived the Titanic disaster!' : '💔 You did not survive.');
-      addLog('info', `Final survival probability: ${(survivalProbability * 100).toFixed(1)}%`);
-      
-      if (onComplete) {
-        onComplete({ survived: finalSurvived, probability: survivalProbability, decisions });
-      }
-      
-      return;
-    }
-    
-    const nextEvent = timeline[nextIndex];
-    setCurrentEvent(nextEvent);
-    addLog('info', `⏰ ${nextEvent.time} - ${nextEvent.event}`);
-    addLog('info', nextEvent.description);
-  };
-
-  const addLog = (type, message) => {
-    setLogs(prev => [...prev, {
-      type,
-      message,
-      timestamp: new Date()
-    }]);
-  };
-
-  const getProbabilityColor = (prob) => {
-    if (prob > 0.6) return 'text-green-500';
-    if (prob > 0.4) return 'text-yellow-500';
-    return 'text-red-500';
-  };
-
-  const getProbabilityBackground = (prob) => {
-    if (prob > 0.6) return 'bg-green-500';
-    if (prob > 0.4) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
-
-  return (
-    <div className={`bg-gray-900 rounded-xl shadow-lg overflow-hidden ${className}`}>
-      {/* Header */}
-      <div className="bg-gray-800 px-6 py-4 border-b border-gray-700 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center">
-            <Ship size={20} className="text-white" />
+  if (result.complete) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="glass-strong rounded-2xl p-8 text-center max-w-2xl mx-auto"
+      >
+        <div className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center ${
+          result.survived 
+            ? 'bg-emerald-500/20 text-emerald-500' 
+            : 'bg-red-500/20 text-red-500'
+        }`}>
+          {result.survived ? <Shield size={40} /> : <Waves size={40} />}
+        </div>
+        <h2 className="text-3xl font-bold mb-2">
+          {result.survived ? 'You Survived' : 'You Perished'}
+        </h2>
+        <p className="text-lg text-muted-foreground mb-6">{result.message}</p>
+        
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-secondary rounded-xl p-4">
+            <div className="text-2xl font-bold">{(result.final_probability * 100).toFixed(1)}%</div>
+            <div className="text-xs text-muted-foreground">Final Probability</div>
           </div>
-          <div>
-            <h3 className="text-white font-semibold">Emergency Simulation</h3>
-            <p className="text-gray-400 text-sm">Titanic Disaster Timeline</p>
+          <div className="bg-secondary rounded-xl p-4">
+            <div className="text-2xl font-bold">{result.decisions?.length || 0}</div>
+            <div className="text-xs text-muted-foreground">Decisions</div>
+          </div>
+          <div className="bg-secondary rounded-xl p-4">
+            <div className="text-2xl font-bold">{result.survived ? 'Yes' : 'No'}</div>
+            <div className="text-xs text-muted-foreground">Survived</div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {isRunning ? (
-            <>
-              {isPaused ? (
-                <button
-                  onClick={resumeSimulation}
-                  className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded-lg text-white text-sm flex items-center gap-1"
-                >
-                  <Play size={16} />
-                  Resume
-                </button>
-              ) : (
-                <button
-                  onClick={pauseSimulation}
-                  className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-white text-sm flex items-center gap-1"
-                >
-                  <Pause size={16} />
-                  Pause
-                </button>
-              )}
-              <button
-                onClick={resetSimulation}
-                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-white text-sm flex items-center gap-1"
+
+        <button onClick={startSimulation} className="btn-secondary">
+          <RotateCcw size={16} />
+          Restart Simulation
+        </button>
+      </motion.div>
+    );
+  }
+
+  const status = result.status || {};
+  const nextEvent = result.next_event;
+
+  return (
+    <div className="space-y-6">
+      {/* Top HUD */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatusBadge 
+          icon={Activity} 
+          label="Survival" 
+          value={`${(result.survival_probability * 100).toFixed(0)}%`} 
+          color={result.survival_probability > 0.5 ? 'text-emerald-500' : 'text-red-500'}
+        />
+        <StatusBadge 
+          icon={MapPin} 
+          label="Location" 
+          value={status.location?.replace(/_/g, ' ') || 'Unknown'} 
+        />
+        <StatusBadge 
+          icon={Thermometer} 
+          label="Condition" 
+          value={status.condition || 'Healthy'} 
+          color={status.condition !== 'healthy' ? 'text-amber-500' : 'text-emerald-500'}
+        />
+        <StatusBadge 
+          icon={Clock} 
+          label="Time" 
+          value={result.current_time} 
+        />
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* Main Narrative */}
+        <div className="md:col-span-2 space-y-4">
+          <motion.div
+            key={result.current_time}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="glass-strong rounded-2xl p-6 md:p-8 relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
+            <div className="flex items-center gap-2 mb-4 text-xs font-semibold text-blue-500 uppercase tracking-wider">
+              <Clock size={12} />
+              {result.current_time} · {nextEvent?.minutes_from_impact || 0} min after impact
+            </div>
+            <p className="text-lg md:text-xl leading-relaxed text-foreground font-medium">
+              {result.narrative}
+            </p>
+            {nextEvent?.event && (
+              <p className="mt-4 text-sm text-muted-foreground italic border-l-2 border-blue-500/30 pl-4">
+                {nextEvent.event}
+              </p>
+            )}
+          </motion.div>
+
+          {/* Choices */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider px-1">
+              What do you do?
+            </h3>
+            {nextEvent?.choices?.map((choice, i) => (
+              <motion.button
+                key={choice.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                onClick={() => makeDecision(choice.id)}
+                disabled={loading}
+                className="w-full text-left glass rounded-xl p-4 hover:bg-secondary/80 transition-all duration-200 group disabled:opacity-50"
               >
-                <RotateCcw size={16} />
-                Reset
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={startSimulation}
-              disabled={isComplete}
-              className="px-4 py-1.5 bg-red-600 hover:bg-red-700 rounded-lg text-white text-sm font-medium flex items-center gap-1"
-            >
-              <Play size={16} />
-              Start Simulation
-            </button>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center text-sm font-bold group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                      {String.fromCharCode(65 + i)}
+                    </div>
+                    <div>
+                      <div className="font-medium text-foreground">{choice.text}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        {choice.risk && (
+                          <span className="badge bg-red-500/10 text-red-500 border-red-500/20">
+                            <AlertTriangle size={10} />
+                            Risk
+                          </span>
+                        )}
+                        {choice.energy_cost && (
+                          <span className="badge bg-amber-500/10 text-amber-500 border-amber-500/20">
+                            <Battery size={10} />
+                            -{choice.energy_cost} Energy
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight size={18} className="text-muted-foreground group-hover:text-foreground transition-colors" />
+                </div>
+              </motion.button>
+            ))}
+          </div>
+        </div>
+
+        {/* Side Panel */}
+        <div className="space-y-4">
+          {/* Vitals */}
+          <div className="glass rounded-2xl p-5 space-y-4">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <Heart size={14} className="text-red-500" />
+              Vitals
+            </h3>
+            <VitalBar label="Panic" value={status.panic_level || 0} max={10} color="bg-red-500" />
+            <VitalBar label="Warmth" value={status.warmth || 10} max={10} color="bg-amber-500" />
+            <VitalBar label="Energy" value={status.energy || 10} max={10} color="bg-blue-500" />
+            <VitalBar label="Reputation" value={status.reputation || 5} max={10} color="bg-violet-500" />
+          </div>
+
+          {/* Inventory */}
+          {status.inventory?.length > 0 && (
+            <div className="glass rounded-2xl p-5">
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                <Backpack size={14} className="text-emerald-500" />
+                Inventory
+              </h3>
+              <div className="space-y-2">
+                {status.inventory.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 text-sm px-3 py-2 bg-secondary rounded-lg">
+                    <Shield size={12} className="text-emerald-500" />
+                    {item.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Companions */}
+          {status.companions?.length > 0 && (
+            <div className="glass rounded-2xl p-5">
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                <Users size={14} className="text-blue-500" />
+                Companions
+              </h3>
+              <div className="space-y-2">
+                {status.companions.map((c, i) => (
+                  <div key={i} className="text-sm px-3 py-2 bg-secondary rounded-lg">
+                    {c.name} · <span className="text-muted-foreground">{c.relation}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Decision Log */}
+          {result.decisions?.length > 0 && (
+            <div className="glass rounded-2xl p-5 max-h-64 overflow-y-auto">
+              <h3 className="text-sm font-semibold mb-3">Log</h3>
+              <div className="space-y-2">
+                {result.decisions.map((d, i) => (
+                  <div key={i} className="text-xs text-muted-foreground border-l-2 border-border pl-3 py-1">
+                    <span className="font-medium text-foreground">{d.time}</span> — {d.decision}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Main Content */}
-      <div className="grid md:grid-cols-3 gap-0">
-        {/* Left: Simulation Console */}
-        <div className="md:col-span-2 p-6">
-          {/* Status Bar */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Clock size={16} className="text-gray-400" />
-                <span className="text-gray-300">
-                  {currentEvent?.time || 'Not started'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-400">Survival:</span>
-                <span className={`font-bold ${getProbabilityColor(survivalProbability)}`}>
-                  {(survivalProbability * 100).toFixed(1)}%
-                </span>
-              </div>
-              {isRunning && !isPaused && (
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-green-500 text-sm">Active</span>
-                </div>
-              )}
-              {isPaused && (
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full" />
-                  <span className="text-yellow-500 text-sm">Paused</span>
-                </div>
-              )}
-              {isComplete && (
-                <div className="flex items-center gap-1">
-                  <span className="text-white text-sm font-medium">
-                    {survived ? '✅ SURVIVED' : '❌ PERISHED'}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="w-32 h-2 bg-gray-700 rounded-full overflow-hidden">
-              <motion.div
-                className={`h-full rounded-full ${getProbabilityBackground(survivalProbability)}`}
-                initial={{ width: `${initialProbability * 100}%` }}
-                animate={{ width: `${survivalProbability * 100}%` }}
-                transition={{ duration: 0.5 }}
-              />
-            </div>
-          </div>
+function StatusBadge({ icon: Icon, label, value, color = 'text-foreground' }) {
+  return (
+    <div className="glass rounded-xl p-3 flex items-center gap-3">
+      <div className={`w-10 h-10 rounded-lg bg-secondary flex items-center justify-center ${color}`}>
+        <Icon size={18} />
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground uppercase tracking-wider">{label}</div>
+        <div className={`text-sm font-bold capitalize ${color}`}>{value}</div>
+      </div>
+    </div>
+  );
+}
 
-          {/* Event Display */}
-          {currentEvent && (
-            <motion.div
-              key={currentEvent.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-gray-800 rounded-lg p-4 mb-4"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle size={20} className="text-red-400" />
-                </div>
-                <div>
-                  <h4 className="text-white font-medium">{currentEvent.event}</h4>
-                  <p className="text-gray-400 text-sm mt-1">{currentEvent.description}</p>
-                </div>
-              </div>
-
-              {/* Choices */}
-              {currentEvent.choices && !isComplete && (
-                <div className="mt-4 space-y-2">
-                  <p className="text-gray-400 text-sm mb-2">Choose your action:</p>
-                  {currentEvent.choices.map((choice) => (
-                    <button
-                      key={choice.id}
-                      onClick={() => makeDecision(choice)}
-                      disabled={isPaused}
-                      className={`w-full text-left px-4 py-2.5 rounded-lg transition-colors flex items-center justify-between ${
-                        isPaused
-                          ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                          : 'bg-gray-700 hover:bg-gray-600 text-white'
-                      }`}
-                    >
-                      <div>
-                        <span className="font-medium">{choice.text}</span>
-                        <p className="text-xs text-gray-400">{choice.description}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm ${choice.modifier > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {choice.modifier > 0 ? '+' : ''}{choice.modifier * 100}%
-                        </span>
-                        <ChevronRight size={16} className="text-gray-500" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* Logs */}
-          <div className="bg-gray-800 rounded-lg p-3 h-40 overflow-y-auto">
-            <div className="space-y-1">
-              {logs.map((log, index) => (
-                <div
-                  key={index}
-                  className={`text-sm ${
-                    log.type === 'decision'
-                      ? 'text-blue-400'
-                      : log.type === 'result'
-                      ? 'text-yellow-400 font-medium'
-                      : 'text-gray-400'
-                  }`}
-                >
-                  <span className="text-gray-600 text-xs">
-                    {log.timestamp.toLocaleTimeString()}
-                  </span>
-                  {' '}
-                  {log.message}
-                </div>
-              ))}
-              <div ref={logEndRef} />
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Stats Panel */}
-        <div className="bg-gray-800/50 p-6 border-l border-gray-700">
-          <h4 className="text-white font-medium mb-4">Decision History</h4>
-          
-          <div className="space-y-3 max-h-[300px] overflow-y-auto">
-            {decisions.length === 0 ? (
-              <p className="text-gray-500 text-sm">No decisions made yet</p>
-            ) : (
-              decisions.map((decision, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="bg-gray-700 rounded-lg p-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-white text-sm">{decision.text}</span>
-                    <span className={`text-xs font-medium ${
-                      decision.modifier > 0 ? 'text-green-400' : 'text-red-400'
-                    }`}>
-                      {decision.modifier > 0 ? '+' : ''}{decision.modifier * 100}%
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-gray-400 text-xs">{decision.time}</span>
-                    <span className="text-xs text-gray-400">
-                      {((decision.newProbability || 0) * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </div>
-
-          {/* Stats */}
-          {isComplete && (
-            <div className="mt-4 p-3 rounded-lg bg-gray-700">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-300 text-sm">Outcome</span>
-                <span className={`font-bold ${survived ? 'text-green-400' : 'text-red-400'}`}>
-                  {survived ? 'SURVIVED' : 'PERISHED'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-gray-300 text-sm">Final Probability</span>
-                <span className="text-white font-bold">
-                  {(survivalProbability * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-gray-300 text-sm">Decisions Made</span>
-                <span className="text-white">{decisions.length}</span>
-              </div>
-            </div>
-          )}
-        </div>
+function VitalBar({ label, value, max, color }) {
+  const pct = (value / max) * 100;
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium">{value}/{max}</span>
+      </div>
+      <div className="h-2 bg-secondary rounded-full overflow-hidden">
+        <motion.div 
+          className={`h-full rounded-full ${color}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.5 }}
+        />
       </div>
     </div>
   );
