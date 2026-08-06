@@ -391,11 +391,13 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>© 2024 Titanic AI</span>
+              <span>© 2026 Titanic AI</span>
               <span className="hidden md:inline">·</span>
-              <span className="hidden md:inline flex items-center gap-1">
-                Built with <Heart size={12} className="text-red-500 fill-red-500" /> by Samuel.K
-              </span>
+              <span className="hidden md:inline whitespace-nowrap text-xs text-gray-500">
+  <span>Built with</span>
+  <Heart size={12} className="text-red-500 fill-red-500 inline-block align-middle ml-1.5" />
+  <span className="ml-1.5">love by Samuel.K</span>
+</span>
             </div>
             <div className="flex items-center gap-4">
               <a
