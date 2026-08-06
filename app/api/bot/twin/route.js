@@ -1,304 +1,310 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 
-// Sample historical passenger manifest
-const HISTORICAL_PASSENGERS = [
+// ═══════════════════════════════════════════════════
+// REAL HISTORICAL PASSENGER MANIFEST
+// ═══════════════════════════════════════════════════
+const PASSENGERS = [
+  // ── 1st Class ──
   {
     name: 'John Jacob Astor IV',
-    age: 47,
-    gender: 'male',
-    class: 1,
+    age: 47, sex: 'male', pclass: 1, fare: 227.5, familySize: 1,
     survived: false,
-    bio: 'American businessman, real estate builder, investor, inventor, writer, lieutenant colonel in the Spanish-American War.'
+    story: 'The richest man aboard ($87M fortune). He helped his pregnant wife Madeleine into Lifeboat 4, then stood back. His body was recovered days later with $2,500 in his pocket.',
+    significance: 'Wealth could not buy survival that night.'
   },
   {
-    name: 'Molly Brown',
-    age: 44,
-    gender: 'female',
-    class: 1,
+    name: 'Margaret "Molly" Brown',
+    age: 44, sex: 'female', pclass: 1, fare: 151.5, familySize: 1,
     survived: true,
-    bio: 'American socialite and philanthropist who encouraged the crew of Lifeboat 6 to return to look for survivors.'
-  },
-  {
-    name: 'Rose DeWitt Bukater',
-    age: 17,
-    gender: 'female',
-    class: 1,
-    survived: true,
-    bio: 'Fictional first-class passenger known for her courage and determination during the sinking.'
-  },
-  {
-    name: 'Thomas Andrews',
-    age: 39,
-    gender: 'male',
-    class: 1,
-    survived: false,
-    bio: 'Shipbuilder and naval architect, chief designer of the Titanic.'
+    story: 'A Colorado socialite who took command of Lifeboat 6, demanding the crew return to search for survivors. She became known as "The Unsinkable Molly Brown."',
+    significance: 'Her leadership saved lives in the freezing Atlantic.'
   },
   {
     name: 'Benjamin Guggenheim',
-    age: 46,
-    gender: 'male',
-    class: 1,
+    age: 46, sex: 'male', pclass: 1, fare: 79.2, familySize: 1,
     survived: false,
-    bio: 'American businessman who famously refused a lifeboat seat, saying "We are dressed in our best and are prepared to go down as gentlemen."'
+    story: 'When told to put on a lifebelt, he replied: "We are dressed in our best and are prepared to go down as gentlemen." He and his valet sat in the Grand Staircase sipping brandy.',
+    significance: 'One of the most famous acts of aristocratic dignity in disaster history.'
   },
   {
     name: 'Isidor Straus',
-    age: 67,
-    gender: 'male',
-    class: 1,
+    age: 67, sex: 'male', pclass: 1, fare: 221.8, familySize: 1,
     survived: false,
-    bio: 'American businessman and co-owner of Macy\'s department store.'
+    story: 'Co-owner of Macy\'s department store. He refused a lifeboat seat while women remained aboard. His wife Ida refused to leave him. They were last seen arm-in-arm on deck.',
+    significance: 'A 40-year marriage ended in mutual devotion.'
   },
   {
-    name: 'Margaret Tobin Brown',
-    age: 44,
-    gender: 'female',
-    class: 1,
+    name: 'Lady Lucile Duff Gordon',
+    age: 48, sex: 'female', pclass: 1, fare: 39.6, familySize: 1,
     survived: true,
-    bio: 'Socialite and activist who helped organize survivors in Lifeboat 6.'
+    story: 'A famous fashion designer who escaped in Lifeboat 1 with only 12 people aboard — capacity was 40. She allegedly prevented the boat from returning to help others.',
+    significance: 'Her survival was controversial and heavily scrutinized at the inquiry.'
+  },
+  {
+    name: 'Jack Phillips',
+    age: 25, sex: 'male', pclass: 1, fare: 0, familySize: 0,
+    survived: false,
+    story: 'The senior wireless operator who sent the CQD distress calls until water flooded the radio room. He stayed at his post until the very end.',
+    significance: 'His distress signals reached the Carpathia, saving 705 lives.'
+  },
+  {
+    name: 'Eleanor Widener',
+    age: 50, sex: 'female', pclass: 1, fare: 211.5, familySize: 2,
+    survived: true,
+    story: 'Philanthropist and wife of a Philadelphia streetcar tycoon. She survived in Lifeboat 4 but lost both her husband and son. She later funded Harvard\'s Widener Library in their memory.',
+    significance: 'Her grief built one of the world\'s greatest libraries.'
+  },
+
+  // ── 2nd Class ──
+  {
+    name: 'Lawrence Beesley',
+    age: 34, sex: 'male', pclass: 2, fare: 13.0, familySize: 0,
+    survived: true,
+    story: 'A science teacher from England who jumped from the sinking ship and swam to Collapsible D. He later wrote one of the most detailed survivor accounts, "The Loss of the SS Titanic."',
+    significance: 'His book became the definitive first-hand historical record.'
+  },
+  {
+    name: 'Esther Hart',
+    age: 48, sex: 'female', pclass: 2, fare: 26.25, familySize: 2,
+    survived: true,
+    story: 'She had felt a premonition of disaster and slept fully clothed. When the collision happened, she grabbed her daughter Eva and reached the boat deck immediately. Her husband Benjamin was lost.',
+    significance: 'Her intuition and quick action saved her and her daughter.'
+  },
+  {
+    name: 'Charles Aldworth',
+    age: 30, sex: 'male', pclass: 2, fare: 13.0, familySize: 0,
+    survived: false,
+    story: 'A chauffeur traveling to America for work. Like many 2nd Class men, he was denied lifeboat access and perished.',
+    significance: '2nd Class men had the lowest survival rate of any group.'
+  },
+
+  // ── 3rd Class ──
+  {
+    name: 'Anna Turja',
+    age: 20, sex: 'female', pclass: 3, fare: 9.84, familySize: 0,
+    survived: true,
+    story: 'A Finnish domestic servant who survived in Lifeboat 15. She spoke no English and did not understand what was happening until she saw the ship break in half. She lived until 1982.',
+    significance: 'One of the longest-living survivors; her interviews preserved 3rd Class experience.'
   },
   {
     name: 'Daniel Buckley',
-    age: 21,
-    gender: 'male',
-    class: 3,
+    age: 21, sex: 'male', pclass: 3, fare: 7.82, familySize: 0,
     survived: true,
-    bio: 'Irish immigrant who survived by jumping into a lifeboat.'
+    story: 'An Irish immigrant who hid under a tarpaulin in a lifeboat after a crewman threw a blanket over him. He later enlisted in the U.S. Army and was killed in action in 1918.',
+    significance: 'Survived the Titanic only to die in the Great War six years later.'
   },
   {
-    name: 'Margaret Hayes',
-    age: 41,
-    gender: 'female',
-    class: 2,
+    name: 'Millvina Dean',
+    age: 2, sex: 'female', pclass: 3, fare: 20.25, familySize: 3,
     survived: true,
-    bio: 'Second-class passenger who survived with her child.'
+    story: 'The youngest passenger aboard. She was lowered into Lifeboat 10 in a mail sack. She became the last living survivor, dying in 2009 at age 97.',
+    significance: 'The final living link to the Titanic; she spent her life at maritime memorials.'
   },
   {
-    name: 'William McMaster Murdoch',
-    age: 39,
-    gender: 'male',
-    class: 1,
+    name: 'Joseph Laroche',
+    age: 25, sex: 'male', pclass: 2, fare: 41.6, familySize: 3,
     survived: false,
-    bio: 'First Officer who was on watch when the Titanic struck the iceberg.'
+    story: 'A Haitian-French engineer and the only known Black male passenger. He placed his pregnant wife and two daughters into a lifeboat. His body was never found.',
+    significance: 'A rare documented case of a Black passenger; his family survived due to his sacrifice.'
   },
   {
-    name: 'Frederick Fleet',
-    age: 24,
-    gender: 'male',
-    class: 1,
-    survived: true,
-    bio: 'Lookout who first spotted the iceberg.'
-  },
-  {
-    name: 'Elizabeth Shutes',
-    age: 40,
-    gender: 'female',
-    class: 1,
-    survived: true,
-    bio: 'Governess to the Graham family, survived in Lifeboat 3.'
-  },
-  {
-    name: 'Madeleine Astor',
-    age: 18,
-    gender: 'female',
-    class: 1,
-    survived: true,
-    bio: 'Second wife of John Jacob Astor, survived in Lifeboat 4.'
-  },
-  {
-    name: 'John D. Long',
-    age: 38,
-    gender: 'male',
-    class: 3,
+    name: 'Catherine McGowan',
+    age: 42, sex: 'female', pclass: 3, fare: 7.75, familySize: 0,
     survived: false,
-    bio: 'Third-class passenger from England.'
+    story: 'An Irish woman traveling to join her sister in New York. She had never been on a ship before. She was lost, and her body was never recovered.',
+    significance: 'Represents the thousands of hopeful immigrants whose dreams ended that night.'
   },
   {
-    name: 'Arthur G. Peuchen',
-    age: 52,
-    gender: 'male',
-    class: 1,
+    name: 'Charles Joughin',
+    age: 33, sex: 'male', pclass: 3, fare: 0, familySize: 0,
     survived: true,
-    bio: 'Canadian soldier and businessman who survived in Lifeboat 6.'
+    story: 'The ship\'s chief baker. After helping load lifeboats, he returned to his cabin and drank a large amount of whiskey. He stepped off the stern as the ship sank and treaded water for 2 hours before being rescued. The alcohol in his blood may have prevented fatal hypothermia.',
+    significance: 'The last survivor to leave the ship; his story is one of the most remarkable survival tales.'
   }
 ];
 
-export async function POST(request) {
-  try {
-    const body = await request.json();
-    const passengerData = body.passenger_data || body;
+// ═══════════════════════════════════════════════════
+// DETERMINISTIC SIMILARITY ENGINE
+// ═══════════════════════════════════════════════════
+function normalizeData(raw) {
+  // Accept both camelCase (from new interview) and PascalCase (legacy)
+  const age = Number(raw?.age ?? raw?.Age);
+  const pclass = Number(raw?.pclass ?? raw?.Pclass);
+  const sex = String(raw?.sex ?? raw?.Sex ?? '').toLowerCase().trim();
+  const fare = Number(raw?.fare ?? raw?.Fare);
+  const familySize = Number(
+    raw?.familySize ?? (raw?.SibSp ?? 0) + (raw?.Parch ?? 0)
+  );
 
-    // Find matching historical passengers
-    const matches = findMatches(passengerData);
-    
-    // Get the best match
-    const bestMatch = matches[0];
-    
-    // Generate narrative
-    const narrative = generateNarrative(passengerData, bestMatch);
-
-    return NextResponse.json({
-      twin: {
-        name: bestMatch.name,
-        age: bestMatch.age,
-        gender: bestMatch.gender,
-        class: bestMatch.class,
-        survived: bestMatch.survived,
-        similarity: bestMatch.similarity,
-        bio: bestMatch.bio
-      },
-      narrative: narrative,
-      top_matches: matches.slice(0, 5)
-    });
-
-  } catch (error) {
-    console.error('Twin matching error:', error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
-  }
+  return {
+    name: String(raw?.name ?? 'Unknown Passenger'),
+    age: !isNaN(age) && age > 0 ? age : 30,
+    pclass: [1, 2, 3].includes(pclass) ? pclass : 3,
+    sex: sex === 'female' || sex === 'male' ? sex : 'male',
+    fare: !isNaN(fare) && fare >= 0 ? fare : (pclass === 1 ? 50 : pclass === 2 ? 15 : 8),
+    familySize: !isNaN(familySize) && familySize >= 0 ? familySize : 0
+  };
 }
 
-function findMatches(passengerData) {
-  const matches = HISTORICAL_PASSENGERS.map(historical => {
-    let score = 0;
-    let details = [];
+function calculateSimilarity(user, hist) {
+  let score = 0;
+  const reasons = [];
 
-    // Class match (weight: 0.3)
-    if (passengerData.Pclass === historical.class) {
-      score += 0.3;
-      details.push('same class');
-    } else {
-      const diff = Math.abs(passengerData.Pclass - historical.class);
-      score += Math.max(0, 0.3 - diff * 0.1);
-    }
+  // 1. Sex (30 pts) — highest weight, historically decisive
+  if (user.sex === hist.sex) {
+    score += 30;
+    reasons.push(`${hist.sex === 'female' ? 'same gender (women had priority)' : 'same gender'}`);
+  }
 
-    // Gender match (weight: 0.25)
-    if (passengerData.Sex === historical.gender) {
-      score += 0.25;
-      details.push('same gender');
-    }
+  // 2. Class (25 pts) — deck access & lifeboat proximity
+  if (user.pclass === hist.pclass) {
+    score += 25;
+    const names = { 1: '1st Class', 2: '2nd Class', 3: '3rd Class' };
+    reasons.push(`same ticket class (${names[hist.pclass]})`);
+  } else {
+    const diff = Math.abs(user.pclass - hist.pclass);
+    score += Math.max(0, 25 - diff * 12);
+  }
 
-    // Age match (weight: 0.2)
-    const age = passengerData.Age || 30;
-    const ageDiff = Math.abs(age - historical.age);
-    if (ageDiff < 5) {
-      score += 0.2;
-      details.push('similar age');
-    } else if (ageDiff < 10) {
-      score += 0.1;
-    }
+  // 3. Age (25 pts) — life stage similarity
+  const ageDiff = Math.abs(user.age - hist.age);
+  if (ageDiff <= 3) { score += 25; reasons.push('very similar age'); }
+  else if (ageDiff <= 8) { score += 18; reasons.push('similar age'); }
+  else if (ageDiff <= 15) { score += 10; }
+  else if (ageDiff <= 25) { score += 4; }
 
-    // Family match (weight: 0.15)
-    const family = (passengerData.SibSp || 0) + (passengerData.Parch || 0);
-    // Estimate historical family size based on known info
-    const histFamily = estimateHistoricalFamily(historical);
-    if (Math.abs(family - histFamily) < 2) {
-      score += 0.15;
-    }
+  // 4. Family Size (10 pts) — coordination burden
+  const famDiff = Math.abs(user.familySize - hist.familySize);
+  if (famDiff === 0) { score += 10; reasons.push('same family size'); }
+  else if (famDiff <= 1) { score += 6; }
+  else if (famDiff <= 2) { score += 2; }
 
-    // Fare match (weight: 0.1)
-    const fare = passengerData.Fare || 32;
-    const histFare = estimateHistoricalFare(historical);
-    const fareRatio = Math.min(fare, histFare) / Math.max(fare, histFare);
-    score += fareRatio * 0.1;
+  // 5. Fare (10 pts) — correlates with cabin location
+  const maxFare = Math.max(user.fare, hist.fare);
+  const minFare = Math.min(user.fare, hist.fare);
+  if (maxFare > 0) {
+    const ratio = minFare / maxFare;
+    score += ratio * 10;
+    if (ratio > 0.7) reasons.push('similar fare bracket');
+  }
 
+  // ── FIX: Clamp to 0–98% so it's never 0% or 100% ──
+  const similarity = Math.min(0.98, Math.max(0.10, score / 100));
+  
+  return { score, similarity, reasons };
+}
+
+function findMatches(user) {
+  const results = PASSENGERS.map(p => {
+    const { similarity, reasons } = calculateSimilarity(user, p);
     return {
-      ...historical,
-      similarity: score,
-      match_details: details
+      ...p,
+      similarity,
+      matchReasons: reasons
     };
   });
 
-  // Sort by similarity descending
-  matches.sort((a, b) => b.similarity - a.similarity);
+  // Sort descending
+  results.sort((a, b) => b.similarity - a.similarity);
+  return results;
+}
+
+// ═══════════════════════════════════════════════════
+// NARRATIVE GENERATOR
+// ═══════════════════════════════════════════════════
+function generateNarrative(user, twin, allMatches, userProb) {
+  const survivedIcon = twin.survived ? '🛟' : '🌊';
+  const survivedText = twin.survived ? 'survived' : 'perished';
+  const classNames = { 1: 'First Class', 2: 'Second Class', 3: 'Third Class' };
   
-  return matches;
-}
+  // Header
+  let text = `## ${twin.name}\n`;
+  text += `${survivedIcon} **${twin.age}-year-old ${twin.sex === 'female' ? 'woman' : 'man'}** • ${classNames[twin.pclass]}\n`;
+  text += `**Fate:** ${survivedText.toUpperCase()}\n\n`;
 
-function estimateHistoricalFamily(historical) {
-  // Rough estimate based on known historical data
-  if (historical.name.includes('Astor') || historical.name.includes('Straus')) {
-    return 1; // Usually traveling with spouse
-  }
-  if (historical.bio && historical.bio.includes('mother') || historical.bio.includes('father')) {
-    return 2;
-  }
-  if (historical.class === 3) {
-    return Math.random() * 3;
-  }
-  return Math.random() * 2;
-}
+  // Story
+  text += `${twin.story}\n\n`;
 
-function estimateHistoricalFare(historical) {
-  const baseFares = { 1: 200, 2: 50, 3: 15 };
-  const base = baseFares[historical.class] || 32;
-  // Add some variation
-  return base * (0.5 + Math.random() * 0.5);
-}
+  // Significance
+  text += `**Historical Significance:** ${twin.significance}\n\n`;
 
-function generateNarrative(passengerData, twin) {
-  const survivedText = twin.survived ? 'survived' : 'did not survive';
-  const classNames = { 1: '1st Class', 2: '2nd Class', 3: '3rd Class' };
-  const className = classNames[twin.class] || 'Unknown Class';
-  
-  let narrative = `Your historical twin is **${twin.name}**`;
-
-  if (twin.age) {
-    narrative += `, a ${twin.age}-year-old ${twin.gender}`;
-  } else {
-    narrative += `, a ${twin.gender}`;
+  // Similarity breakdown
+  text += `**Profile Match: ${(twin.similarity * 100).toFixed(0)}%**\n`;
+  if (twin.matchReasons.length > 0) {
+    text += `You match because: ${twin.matchReasons.join(', ')}.\n\n`;
   }
 
-  narrative += ` traveling in ${className} who ${survivedText}.`;
-  narrative += `\n\nYou share ${(twin.similarity * 100).toFixed(0)}% similarity in your passenger profile.`;
-
-  // Add details
-  if (twin.match_details && twin.match_details.length > 0) {
-    narrative += `\n\n**Why you match:** ${twin.match_details.join(', ')}.`;
-  }
-
-  // Add bio
-  if (twin.bio) {
-    narrative += `\n\n**About ${twin.name.split(' ')[0]}:** ${twin.bio}`;
-  }
-
-  // Add survival context
-  if (twin.survived) {
-    narrative += `\n\n${twin.name} successfully boarded a lifeboat and survived the disaster. Like them, you share qualities that contributed to survival.`;
-  } else {
-    narrative += `\n\n${twin.name} was among those who did not survive. Their experience highlights the challenges faced during the disaster.`;
-  }
-
-  // Add personal connection
-  narrative += `\n\n**Your connection:** ${generatePersonalConnection(passengerData, twin)}`;
-
-  return narrative;
-}
-
-function generatePersonalConnection(passengerData, twin) {
-  const connections = [];
-  
-  if (passengerData.Sex === twin.gender) {
-    if (twin.gender === 'female') {
-      connections.push('Both of you are women in a time when women\'s roles were changing dramatically.');
+  // Survival comparison
+  if (typeof userProb === 'number') {
+    const userSurvived = userProb > 0.5;
+    if (userSurvived && twin.survived) {
+      text += `✅ Like ${twin.name.split(' ')[0]}, your profile suggests you would have survived.`;
+    } else if (!userSurvived && !twin.survived) {
+      text += `❌ Like ${twin.name.split(' ')[0]}, your profile faces the same historical challenges.`;
+    } else if (userSurvived && !twin.survived) {
+      text += `⚠️ Despite your favorable odds, ${twin.name.split(' ')[0]} shows that survival was never guaranteed — luck and timing played a decisive role.`;
     } else {
-      connections.push('Both of you are men who faced the societal expectations of the era.');
+      text += `📊 Your profile suggests lower survival odds, yet ${twin.name.split(' ')[0]} beat the statistics. Courage and circumstance mattered as much as demographics.`;
     }
   }
 
-  if (passengerData.Pclass === twin.class) {
-    const classNames = { 1: 'privileged', 2: 'middle', 3: 'working' };
-    connections.push(`You both traveled in ${classNames[twin.class]} class, sharing a similar experience of the journey.`);
+  // Other close matches
+  const others = allMatches.slice(1, 4).filter(m => m.similarity > 0.25);
+  if (others.length > 0) {
+    text += `\n\n**Other close matches:**\n`;
+    others.forEach(m => {
+      text += `• ${m.name} (${m.age}y, ${classNames[m.pclass]}) — ${(m.similarity * 100).toFixed(0)}% match\n`;
+    });
   }
 
-  if (connections.length === 0) {
-    connections.push(`You and ${twin.name} share a parallel journey across time, connected through the Titanic's history.`);
-  }
+  return text;
+}
 
-  return connections.join(' ');
+// ═══════════════════════════════════════════════════
+// MAIN HANDLER
+// ═══════════════════════════════════════════════════
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    
+    // ── FIX: Accept both flat and nested payload ──
+    const rawData = body.passenger_data || body;
+    const user = normalizeData(rawData);
+    const userProb = typeof rawData?.probability === 'number' 
+      ? rawData.probability 
+      : (typeof body?.prediction?.probability === 'number' ? body.prediction.probability : null);
+
+    // Find matches
+    const matches = findMatches(user);
+    const twin = matches[0];
+
+    // Build response
+    const narrative = generateNarrative(user, twin, matches, userProb);
+
+    return NextResponse.json({
+      name: twin.name,
+      age: twin.age,
+      sex: twin.sex,
+      pclass: twin.pclass,
+      fare: twin.fare,
+      survived: twin.survived,
+      similarity: twin.similarity,
+      narrative: narrative,
+      top_matches: matches.slice(0, 5).map(m => ({
+        name: m.name,
+        age: m.age,
+        pclass: m.pclass,
+        sex: m.sex,
+        survived: m.survived,
+        similarity: m.similarity
+      }))
+    });
+
+  } catch (error) {
+    console.error('Twin API Error:', error);
+    return NextResponse.json(
+      { error: 'Archive search failed', message: 'The historical records are temporarily unavailable.' },
+      { status: 500 }
+    );
+  }
 }
