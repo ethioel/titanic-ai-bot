@@ -1,28 +1,31 @@
 import { NextResponse } from 'next/server';
-import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from '@upstash/redis';
-
-const ratelimit = new Ratelimit({
-  redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(10, '1 m'),
-  analytics: true,
-});
 
 export const config = {
-  matcher: ['/api/bot/:path*', '/api/share'],
+  matcher: '/api/bot/:path*',
 };
 
-export async function middleware(request) {
+// Simple in-memory rate limit (resets on cold start)
+const requests = new Map();
+
+export function middleware(request) {
   const ip = request.ip ?? '127.0.0.1';
-  const { success, limit, remaining, reset } = await ratelimit.limit(ip);
+  const now = Date.now();
+  const windowMs = 60 * 1000; // 1 minute
+  const max = 20;
 
-  const response = success 
-    ? NextResponse.next()
-    : NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  const record = requests.get(ip) || { count: 0, resetTime: now + windowMs };
+  
+  if (now > record.resetTime) {
+    record.count = 0;
+    record.resetTime = now + windowMs;
+  }
 
-  response.headers.set('X-RateLimit-Limit', limit.toString());
-  response.headers.set('X-RateLimit-Remaining', remaining.toString());
-  response.headers.set('X-RateLimit-Reset', reset.toString());
+  record.count++;
+  requests.set(ip, record);
 
-  return response;
+  if (record.count > max) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
+  return NextResponse.next();
 }
