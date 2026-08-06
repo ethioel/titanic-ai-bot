@@ -21,6 +21,9 @@ export const metadata = {
     siteName: 'Titanic AI',
     images: [{ url: '/og-image.png', width: 1200, height: 630 }],
     locale: 'en_US',
+    icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-icon.png',
     type: 'website',
   },
   twitter: {
