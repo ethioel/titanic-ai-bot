@@ -4,9 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Send, Bot, User, Loader2, Ship, Waves, 
-  LifeBuoy, AlertCircle, Sparkles, RotateCcw, 
-  ChevronRight, History, Compass
+  Send, Bot, User, Loader2, AlertCircle, Sparkles, 
+  LifeBuoy, Waves, RotateCcw, ChevronRight
 } from 'lucide-react';
 
 const SESSION_KEY = 'titanic_session_v2';
@@ -19,6 +18,7 @@ export default function ChatInterface() {
   const [passengerData, setPassengerData] = useState({});
   const [step, setStep] = useState('welcome');
   const [prediction, setPrediction] = useState(null);
+  const [simProbability, setSimProbability] = useState(null);
   const [typing, setTyping] = useState(false);
 
   const messagesEndRef = useRef(null);
@@ -33,16 +33,16 @@ export default function ChatInterface() {
     }
     setSessionId(session);
 
-    // Single welcome — backend drives the name question
+    // Single welcome — backend drives the conversation
     setMessages([{
       id: 'welcome',
       type: 'bot',
-      content: "🚢 **Welcome aboard the RMS Titanic.**\n\nI am your AI Survival Analyst. I'll assess your passenger profile, find your **Historical Twin**, and run a real-time emergency simulation.\n\n**Type your name below to begin.**",
+      content: "🚢 **Welcome aboard the RMS Titanic.**\n\nI am your AI Survival Analyst. Please **type your name** below to begin your passenger registration.",
       timestamp: new Date(),
       actions: []
     }]);
 
-    setTimeout(() => inputRef.current?.focus(), 600);
+    setTimeout(() => inputRef.current?.focus(), 300);
   }, []);
 
   // ── Auto-scroll ──
@@ -52,10 +52,10 @@ export default function ChatInterface() {
 
   // ── Auto-resize textarea ──
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 128) + 'px';
-    }
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   }, [input]);
 
   // ── Send Handler ──
@@ -100,8 +100,12 @@ export default function ChatInterface() {
         }]);
 
         if (data.action === 'show_twin') fetchTwin();
-        if (data.action === 'start_simulation') startSimulation();
-      }, 700);
+        if (data.action === 'start_simulation') {
+          const baseProb = data.prediction?.probability || 0.5;
+          setSimProbability(baseProb);
+          startSimulation(baseProb);
+        }
+      }, 600);
 
     } catch (err) {
       setTyping(false);
@@ -113,7 +117,7 @@ export default function ChatInterface() {
       }]);
     } finally {
       setLoading(false);
-      setTimeout(() => inputRef.current?.focus(), 150);
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [input, loading, sessionId, step, passengerData]);
 
@@ -128,7 +132,11 @@ export default function ChatInterface() {
   const fetchTwin = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.post('/api/bot/twin', { passenger_data: passengerData });
+      const { data } = await axios.post('/api/bot/twin', {
+        session_id: sessionId,
+        passenger_data: passengerData
+      });
+      
       setMessages(prev => [...prev, {
         id: `twin_${Date.now()}`,
         type: 'twin',
@@ -148,13 +156,14 @@ export default function ChatInterface() {
     }
   };
 
-  const startSimulation = async () => {
+  const startSimulation = async (baseProb) => {
     try {
       setLoading(true);
       const { data } = await axios.post('/api/bot/simulate', {
+        session_id: sessionId,
         passenger_data: passengerData,
         start: true,
-        initial_probability: prediction?.probability || 0.5
+        initial_probability: baseProb
       });
       setMessages(prev => [...prev, {
         id: `sim_${Date.now()}`,
@@ -178,10 +187,18 @@ export default function ChatInterface() {
   const handleSimChoice = async (decisionId) => {
     try {
       setLoading(true);
+      const currentProb = simProbability !== null ? simProbability : (prediction?.probability || 0.5);
+      
       const { data } = await axios.post('/api/bot/simulate', {
+        session_id: sessionId,
         decision_id: decisionId,
-        initial_probability: prediction?.probability || 0.5
+        current_probability: currentProb
       });
+      
+      if (data.survival_probability !== undefined) {
+        setSimProbability(data.survival_probability);
+      }
+      
       setMessages(prev => [...prev, {
         id: `sim_${Date.now()}`,
         type: data.complete ? 'sim_result' : 'simulation',
@@ -203,10 +220,15 @@ export default function ChatInterface() {
 
   const handleAction = (action) => {
     if (action.id === 'show_twin') fetchTwin();
-    else if (action.id === 'start_simulation') startSimulation();
+    else if (action.id === 'start_simulation') {
+      const baseProb = prediction?.probability || 0.5;
+      setSimProbability(baseProb);
+      startSimulation(baseProb);
+    }
     else if (action.id === 'reset') handleSend('reset');
     else if (action.id.startsWith('class_')) handleSend(action.id.replace('class_', ''));
     else if (action.id.startsWith('sex_')) handleSend(action.id.replace('sex_', ''));
+    else if (action.id.startsWith('embark_')) handleSend(action.id.replace('embark_', ''));
     else if (action.id.startsWith('fam_')) handleSend(action.id.replace('fam_', ''));
     else handleSend(action.text);
   };
@@ -236,7 +258,6 @@ export default function ChatInterface() {
     });
   };
 
-  // ── Avatar Config ──
   const avatarConfig = {
     user: { bg: 'bg-slate-700 dark:bg-slate-600', icon: <User size={16} /> },
     error: { bg: 'bg-red-500', icon: <AlertCircle size={16} /> },
@@ -249,15 +270,9 @@ export default function ChatInterface() {
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
       
-      {/* ═══ HEADER ═══ */}
+      {/* ═══ CLEAN HEADER (no big ship icon — favicon handles browser tab) ═══ */}
       <header className="flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 z-20">
         <div className="flex items-center gap-3">
-          {/* Ship Icon Badge */}
-          <div className="relative flex items-center justify-center w-10 h-10 bg-blue-600 dark:bg-amber-500 rounded-xl shadow-lg shadow-blue-600/20 dark:shadow-amber-500/20">
-            <Ship className="w-6 h-6 text-white" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse" />
-          </div>
-          
           <div>
             <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
               Titanic AI
@@ -266,10 +281,8 @@ export default function ChatInterface() {
               </span>
             </h1>
             <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
               <span>Historical Analysis Active</span>
-              <span className="text-slate-300 dark:text-slate-700">|</span>
-              <span className="font-mono opacity-70">{fmtTime(new Date())}</span>
             </div>
           </div>
         </div>
@@ -392,7 +405,7 @@ export default function ChatInterface() {
                           {msg.simulation?.survived ? 'You Survived' : 'You Perished'}
                         </h3>
                         <p className="text-sm text-slate-600 dark:text-slate-400">
-                          Final survival probability: <span className="font-bold">{(msg.simulation?.survival_probability * 100).toFixed(0)}%</span>
+                          Final survival probability: <span className="font-bold">{(typeof msg.simulation?.survival_probability === 'number' ? msg.simulation.survival_probability * 100 : 0).toFixed(0)}%</span>
                         </p>
                       </div>
                     )}
