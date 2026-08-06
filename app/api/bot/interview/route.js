@@ -7,34 +7,26 @@ const sessions = new Map();
 // SURVIVAL PREDICTION ENGINE
 // ═══════════════════════════════════════════════════
 function calculateProbability(data) {
-  let score = 0.38; // Base Titanic survival rate
+  let score = 0.38;
 
-  // Class (deck access & lifeboat proximity)
   if (data.pclass === 1) score += 0.22;
   else if (data.pclass === 2) score += 0.08;
   else score -= 0.05;
 
-  // Sex ("Women and children first")
   if (data.sex === 'female') score += 0.32;
   else score -= 0.18;
 
-  // Age
-  const age = Number(data.age);
-  if (age < 5) score += 0.15;
-  else if (age < 16) score += 0.10;
-  else if (age > 60) score -= 0.12;
-  else if (age > 45) score -= 0.05;
+  if (data.age < 5) score += 0.15;
+  else if (data.age < 16) score += 0.10;
+  else if (data.age > 60) score -= 0.12;
+  else if (data.age > 45) score -= 0.05;
 
-  // Family size (coordination vs. burden)
-  const fam = Number(data.familySize) || 0;
-  if (fam >= 1 && fam <= 3) score += 0.05;
-  else if (fam > 4) score -= 0.10;
-  else if (fam === 0) score -= 0.02;
+  if (data.familySize >= 1 && data.familySize <= 3) score += 0.05;
+  else if (data.familySize > 4) score -= 0.10;
+  else if (data.familySize === 0) score -= 0.02;
 
-  // Fare (correlates with cabin location)
-  const fare = Number(data.fare) || 0;
-  if (fare > 80) score += 0.04;
-  else if (fare < 10) score -= 0.03;
+  if (data.fare > 80) score += 0.04;
+  else if (data.fare < 10) score -= 0.03;
 
   return Math.max(0.03, Math.min(0.97, score));
 }
@@ -59,11 +51,10 @@ function extractName(msg) {
 }
 
 function extractAge(msg) {
-  // ── FIX: Multiple fallbacks so "25" or "I am 25" both work ──
   const patterns = [
     /(?:age|aged|i am|i'm)\s+(\d{1,3})/i,
     /(\d{1,3})\s*(?:years?|yrs?|yo|y\.o\.)/i,
-    /\b(\d{1,3})\b/ // bare number fallback
+    /\b(\d{1,3})\b/
   ];
   for (const p of patterns) {
     const m = msg.match(p);
@@ -146,17 +137,22 @@ export async function POST(request) {
     let session = sessions.get(session_id);
     if (!session) {
       session = { step: 'welcome', data: {}, history: [] };
+      
+      // If client sends recovered data, fast-forward
+      if (clientData && typeof clientData === 'object') {
+        const recovered = normalizeClientData(clientData);
+        if (recovered.name) {
+          session.data = recovered;
+          session.step = determineStep(recovered);
+        }
+      }
+      
       sessions.set(session_id, session);
-    }
-
-    // Merge any client-side data
-    if (clientData && typeof clientData === 'object') {
-      Object.assign(session.data, clientData);
     }
 
     const input = String(message || '').trim();
     const data = session.data;
-    let step = session.step;
+    let response = {};
 
     // ── Global Reset ──
     if (/^(reset|restart|start over|new|begin again)$/i.test(input)) {
@@ -165,21 +161,18 @@ export async function POST(request) {
       session.history = [];
       return NextResponse.json({
         message: 'Session reset. **Welcome aboard the RMS Titanic.** Please tell me your name.',
-        step: 'name',
+        step: 'welcome',
         passenger_data: {},
         actions: []
       });
     }
 
-    let response = {};
-
     // ═══════════════════════════════════════════════
-    // STATE MACHINE
+    // STATE MACHINE — server owns the step
     // ═══════════════════════════════════════════════
-    switch (step) {
-      // ── WELCOME ──
-      // The frontend already shows a welcome bubble.
-      // We treat the user's FIRST message as their name directly.
+    switch (session.step) {
+      
+      // ── WELCOME: first message is treated as name ──
       case 'welcome': {
         const name = extractName(input);
         if (name) {
@@ -197,7 +190,7 @@ export async function POST(request) {
         } else {
           session.step = 'name';
           response = {
-            message: 'Welcome aboard! Please tell me your name for the passenger manifest.',
+            message: "I didn't catch that. Please tell me your name for the passenger manifest.",
             step: 'name',
             passenger_data: data,
             actions: []
@@ -206,7 +199,7 @@ export async function POST(request) {
         break;
       }
 
-      // ── NAME ──
+      // ── NAME: only reached if welcome failed to extract ──
       case 'name': {
         const name = extractName(input);
         if (!name) {
@@ -385,7 +378,6 @@ export async function POST(request) {
       case 'fare': {
         let fare = extractFare(input);
         if (fare === null) {
-          // Smart default based on class so the flow never breaks
           fare = data.pclass === 1 ? 60 : data.pclass === 2 ? 20 : 8;
         }
         data.fare = fare;
@@ -424,7 +416,7 @@ export async function POST(request) {
           };
         } else if (low.match(/simulat|emergency|scenario|run/)) {
           response = {
-            message: '🚨 **Emergency Simulation Initializing...**\n\nThe iceberg has been sighted. Your survival instincts will be tested.',
+            message: '🚨 **Emergency Simulation Initializing...**',
             step: 'complete',
             passenger_data: data,
             prediction: { probability: prob, verdict },
@@ -432,7 +424,7 @@ export async function POST(request) {
           };
         } else if (low.match(/predict|chance|probability|analysis/)) {
           response = {
-            message: `📊 **${data.name}**, your survival probability is **${(prob * 100).toFixed(0)}%**.\n\n${verdict.icon} **${verdict.label}**\n\n${prob > 0.5 ? 'Your profile aligns with historical survivors.' : 'Your profile faces significant challenges based on 1912 data.'}`,
+            message: `📊 **${data.name}**, your survival probability is **${(prob * 100).toFixed(0)}%**.\n\n${verdict.icon} **${verdict.label}**`,
             step: 'complete',
             passenger_data: data,
             prediction: { probability: prob, verdict },
@@ -463,7 +455,7 @@ export async function POST(request) {
         session.step = 'welcome';
         response = {
           message: "Let's start over. **Welcome aboard!** Please tell me your name.",
-          step: 'name',
+          step: 'welcome',
           passenger_data: data,
           actions: []
         };
@@ -483,4 +475,45 @@ export async function POST(request) {
       { status: 500 }
     );
   }
+}
+
+// ── Helpers ──
+function normalizeClientData(raw) {
+  const get = (keys) => {
+    for (const k of keys) if (raw?.[k] !== undefined && raw?.[k] !== null) return raw[k];
+    return undefined;
+  };
+  
+  const age = Number(get(['age', 'Age']));
+  const pclass = Number(get(['pclass', 'Pclass']));
+  const sex = String(get(['sex', 'Sex']) ?? '').toLowerCase().trim();
+  const fare = Number(get(['fare', 'Fare']));
+  
+  let familySize = Number(get(['familySize', 'family_size', 'FamilySize']));
+  if (isNaN(familySize)) {
+    const sibSp = Number(get(['sibSp', 'SibSp']) ?? 0);
+    const parch = Number(get(['parch', 'Parch']) ?? 0);
+    familySize = sibSp + parch;
+  }
+
+  return {
+    name: String(get(['name', 'Name']) ?? '').trim(),
+    age: !isNaN(age) && age >= 0 && age <= 120 ? age : undefined,
+    pclass: [1, 2, 3].includes(pclass) ? pclass : undefined,
+    sex: sex === 'female' || sex === 'male' ? sex : undefined,
+    fare: !isNaN(fare) && fare >= 0 ? fare : undefined,
+    familySize: !isNaN(familySize) && familySize >= 0 ? familySize : undefined,
+    embarked: String(get(['embarked', 'Embarked']) ?? '').toUpperCase().trim() || undefined
+  };
+}
+
+function determineStep(data) {
+  if (!data.name) return 'welcome';
+  if (!data.sex) return 'gender';
+  if (!data.age) return 'age';
+  if (!data.pclass) return 'class';
+  if (!data.embarked) return 'embarked';
+  if (!data.familySize) return 'family';
+  if (!data.fare) return 'fare';
+  return 'complete';
 }
