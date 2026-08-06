@@ -1,32 +1,49 @@
 {
   "name": "titanic-ai-bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "AI-powered Titanic survival prediction with SHAP explanations, historical twin matching, and immersive emergency simulation.",
+  "author": "Samuel Kahsay <ethioel>",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "train": "python backend/train.py"
+    "lint": "next lint",
+    "train": "cd backend && python train.py",
+    "distill": "cd backend && python distill.py"
   },
   "dependencies": {
-    "next": "14.0.4",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "axios": "^1.6.2",
-    "chart.js": "^4.4.1",
-    "react-chartjs-2": "^5.2.0",
-    "framer-motion": "^10.16.16",
-    "lucide-react": "^0.294.0",
+    "next": "14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@upstash/ratelimit": "^2.0.3",
+    "@upstash/redis": "^1.34.0",
+    "@vercel/analytics": "^1.3.1",
+    "axios": "^1.7.2",
+    "chart.js": "^4.4.3",
+    "clsx": "^2.1.1",
+    "critters": "^0.0.23",
+    "framer-motion": "^11.3.0",
+    "lucide-react": "^0.414.0",
     "next-pwa": "^5.6.0",
-    "critters": "^0.0.20",
-    "@vercel/analytics": "^1.3.0"
+    "react-chartjs-2": "^5.2.0",
+    "sharp": "^0.33.4",
+    "tailwind-merge": "^2.4.0"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.16",
-    "@tailwindcss/forms": "^0.5.7",
-    "@tailwindcss/typography": "^0.5.10",
     "@tailwindcss/aspect-ratio": "^0.4.2",
-    "tailwindcss-animate": "^1.0.7",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.6"
+    "@tailwindcss/forms": "^0.5.7",
+    "@tailwindcss/typography": "^0.5.13",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.5",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "tailwindcss-animate": "^1.0.7"
   }
 }
