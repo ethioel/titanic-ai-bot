@@ -13,7 +13,7 @@ export const metadata = {
   title: 'Titanic AI — Survival Predictor',
   description: 'AI-powered Titanic survival prediction with SHAP explanations, historical twin matching, and immersive emergency simulation.',
   keywords: ['Titanic', 'AI', 'Machine Learning', 'SHAP', 'Survival Prediction', 'Historical Simulation'],
-  authors: [{ name: 'Titanic AI Team' }],
+  authors: [{ name: 'Samuel K.' }],
   metadataBase: new URL('https://titanic-ai-bot.vercel.app'),
   icons: {
     icon: '/favicon.ico',
