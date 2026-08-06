@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Ship, 
@@ -47,49 +47,60 @@ export default function Home() {
   const [passengerData, setPassengerData] = useState(null);
   const [prediction, setPrediction] = useState(null);
   const [twin, setTwin] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState({ predict: false, twin: false });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme } = useTheme();
 
-  const handlePredict = useCallback(async () => {
-    if (!passengerData) return;
-    setLoading(true);
+  // ── FIX: Accept explicit data so we never read stale state ──
+  const handlePredict = useCallback(async (explicitData) => {
+    const payload = explicitData || passengerData;
+    if (!payload) return;
+    
+    setLoading(prev => ({ ...prev, predict: true }));
     try {
       const res = await fetch('/api/bot/predict', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(passengerData),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Prediction failed');
       setPrediction(data.data || data);
       setActiveTab('results');
     } catch (err) {
-      console.error(err);
+      console.error('Predict error:', err);
+      alert(err.message);
     } finally {
-      setLoading(false);
+      setLoading(prev => ({ ...prev, predict: false }));
     }
   }, [passengerData]);
 
-  const handleFindTwin = useCallback(async () => {
-    if (!passengerData) return;
-    setLoading(true);
+  // ── FIX: Accept explicit data — avoids stale closure when called from form ──
+  const handleFindTwin = useCallback(async (explicitData) => {
+    const payload = explicitData || passengerData;
+    if (!payload) return;
+    
+    setLoading(prev => ({ ...prev, twin: true }));
     try {
       const res = await fetch('/api/bot/twin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passenger: passengerData }),
+        // ── FIX: Unified payload shape used across all routes ──
+        body: JSON.stringify({ passenger_data: payload }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Twin search failed');
       setTwin(data.data || data);
     } catch (err) {
-      console.error(err);
+      console.error('Twin error:', err);
+      alert(err.message);
     } finally {
-      setLoading(false);
+      setLoading(prev => ({ ...prev, twin: false }));
     }
   }, [passengerData]);
 
   return (
-    <div className="min-h-screen bg-background transition-colors duration-300 overflow-x-hidden">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 overflow-x-hidden">
       {/* Animated background mesh */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-blue-500/5 via-transparent to-violet-500/5 dark:from-blue-500/10 dark:to-violet-500/10 rounded-full blur-3xl animate-pulse-slow" />
@@ -97,18 +108,18 @@ export default function Home() {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 glass-strong border-b border-border/50">
+      <header className="sticky top-0 z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 dark:from-amber-500 dark:to-orange-600 flex items-center justify-center shadow-lg">
                 <Ship size={18} className="text-white" />
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-background" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900" />
               </div>
               <div className="hidden sm:block">
-                <h1 className="text-sm font-bold tracking-tight text-foreground">Titanic AI</h1>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Survival Engine</p>
+                <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Titanic AI</h1>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">Survival Engine</p>
               </div>
             </div>
 
@@ -121,13 +132,13 @@ export default function Home() {
                   className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     activeTab === tab.id
                       ? 'text-blue-600 dark:text-blue-400'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
                   {activeTab === tab.id && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute inset-0 bg-secondary rounded-lg"
+                      className="absolute inset-0 bg-slate-100 dark:bg-slate-800 rounded-lg"
                       transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                     />
                   )}
@@ -144,7 +155,7 @@ export default function Home() {
               <ThemeToggle />
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden w-10 h-10 rounded-xl glass flex items-center justify-center"
+                className="md:hidden w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-300"
               >
                 {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
               </button>
@@ -159,7 +170,7 @@ export default function Home() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="md:hidden border-t border-border/50 overflow-hidden"
+              className="md:hidden border-t border-slate-200 dark:border-slate-800 overflow-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl"
             >
               <div className="px-4 py-3 grid grid-cols-2 gap-2">
                 {tabs.map((tab) => (
@@ -168,8 +179,8 @@ export default function Home() {
                     onClick={() => { setActiveTab(tab.id); setMobileMenuOpen(false); }}
                     className={`px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                       activeTab === tab.id
-                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
-                        : 'bg-secondary text-foreground'
+                        ? 'bg-blue-600 text-white shadow-lg'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     <span className="mr-2">{tab.icon}</span>
@@ -183,23 +194,25 @@ export default function Home() {
       </header>
 
       {/* Main */}
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10">
         {/* Hero */}
-        <div className="text-center mb-12 space-y-4">
+        <div className="text-center mb-10 md:mb-14 space-y-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-semibold border border-blue-500/20 mb-4">
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-semibold border border-blue-200 dark:border-blue-800 mb-4">
               <Sparkles size={12} />
               Powered by Stacking Ensemble ML
             </span>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-balance">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-balance text-slate-900 dark:text-white">
               Would You Have <br />
-              <span className="text-gradient">Survived the Titanic?</span>
+              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-amber-400 dark:to-orange-400 bg-clip-text text-transparent">
+                Survived the Titanic?
+              </span>
             </h1>
-            <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto text-balance">
+            <p className="mt-4 text-base md:text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto text-balance">
               Enter your details and our AI predicts your survival probability, finds your historical twin, and immerses you in the sinking.
             </p>
           </motion.div>
@@ -209,13 +222,13 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, duration: 0.5 }}
-            className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-3xl mx-auto mt-8"
+            className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-3xl mx-auto mt-6 md:mt-8"
           >
             {stats.map((stat, i) => (
-              <div key={i} className="glass rounded-2xl p-4 card-hover">
+              <div key={i} className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200 dark:border-slate-800 rounded-2xl p-4 hover:shadow-md transition-shadow">
                 <stat.icon size={20} className={`mx-auto mb-2 ${stat.color}`} />
-                <div className="text-xl font-bold text-foreground">{stat.label}</div>
-                <div className="text-xs text-muted-foreground">{stat.desc}</div>
+                <div className="text-xl font-bold text-slate-900 dark:text-white">{stat.label}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">{stat.desc}</div>
               </div>
             ))}
           </motion.div>
@@ -245,15 +258,15 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="grid lg:grid-cols-5 gap-6 max-w-5xl mx-auto"
+              className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6 max-w-5xl mx-auto"
             >
               <div className="lg:col-span-3">
-                <div className="glass-strong rounded-2xl p-6">
-                  <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
+                <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200 dark:border-slate-800 rounded-2xl p-5 md:p-6">
+                  <h2 className="text-xl font-bold mb-1 flex items-center gap-2 text-slate-900 dark:text-white">
                     <Brain size={20} className="text-blue-500" />
                     Passenger Profile
                   </h2>
-                  <p className="text-sm text-muted-foreground mb-6">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                     Build your persona for the AI analysis.
                   </p>
                   <PassengerForm onComplete={setPassengerData} />
@@ -265,9 +278,9 @@ export default function Home() {
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="glass-strong rounded-2xl p-6"
+                    className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200 dark:border-slate-800 rounded-2xl p-5 md:p-6"
                   >
-                    <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2 text-slate-900 dark:text-white">
                       <Users size={16} className="text-blue-500" />
                       Your Profile
                     </h3>
@@ -280,18 +293,19 @@ export default function Home() {
                         ['Port', { S: 'Southampton', C: 'Cherbourg', Q: 'Queenstown' }[passengerData.Embarked]],
                         ['Fare', `£${passengerData.Fare}`],
                       ].map(([k, v]) => (
-                        <div key={k} className="flex justify-between items-center py-2 border-b border-border/50 last:border-0">
-                          <span className="text-sm text-muted-foreground">{k}</span>
-                          <span className="text-sm font-semibold">{v}</span>
+                        <div key={k} className="flex justify-between items-center py-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                          <span className="text-sm text-slate-500 dark:text-slate-400">{k}</span>
+                          <span className="text-sm font-semibold text-slate-900 dark:text-white">{v}</span>
                         </div>
                       ))}
                     </div>
+                    {/* ── FIX: Pass fresh data explicitly ── */}
                     <button
-                      onClick={handlePredict}
-                      disabled={loading}
-                      className="btn-primary w-full mt-6"
+                      onClick={() => handlePredict(passengerData)}
+                      disabled={loading.predict}
+                      className="w-full mt-6 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98]"
                     >
-                      {loading ? <LoadingSpinner size="sm" /> : (
+                      {loading.predict ? <LoadingSpinner size="sm" /> : (
                         <>
                           <Zap size={16} />
                           Run Prediction
@@ -300,7 +314,7 @@ export default function Home() {
                     </button>
                   </motion.div>
                 ) : (
-                  <div className="glass rounded-2xl p-8 text-center text-muted-foreground">
+                  <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center text-slate-500 dark:text-slate-400">
                     <Brain size={32} className="mx-auto mb-3 opacity-50" />
                     <p className="text-sm">Fill the form to see your profile and run the prediction.</p>
                   </div>
@@ -326,12 +340,18 @@ export default function Home() {
                   navigator.clipboard.writeText(text);
                 }}
               />
-              <div className="mt-6 flex justify-center gap-3">
-                <button onClick={() => setActiveTab('twin')} className="btn-secondary">
+              <div className="mt-6 flex flex-col sm:flex-row justify-center gap-3">
+                <button 
+                  onClick={() => setActiveTab('twin')} 
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
                   Find Historical Twin
                   <ChevronRight size={16} />
                 </button>
-                <button onClick={() => setActiveTab('simulate')} className="btn-primary">
+                <button 
+                  onClick={() => setActiveTab('simulate')} 
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98]"
+                >
                   Start Simulation
                   <ChevronRight size={16} />
                 </button>
@@ -347,21 +367,25 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="grid lg:grid-cols-2 gap-6 max-w-5xl mx-auto"
+              className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 max-w-5xl mx-auto"
             >
-              <div className="glass-strong rounded-2xl p-6">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200 dark:border-slate-800 rounded-2xl p-5 md:p-6">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 dark:text-white">
                   <Users size={20} className="text-violet-500" />
                   Find Your Twin
                 </h2>
-                <PassengerForm onComplete={(data) => { setPassengerData(data); handleFindTwin(); }} compact />
+                {/* ── FIX: Pass fresh data directly into handleFindTwin ── */}
+                <PassengerForm 
+                  onComplete={(data) => { setPassengerData(data); handleFindTwin(data); }} 
+                  compact 
+                />
               </div>
               <div>
                 <HistoricalTwin 
                   passengerData={passengerData} 
                   twinData={twin}
-                  onRefresh={handleFindTwin}
-                  loading={loading}
+                  onRefresh={() => passengerData && handleFindTwin(passengerData)}
+                  loading={loading.twin}
                 />
               </div>
             </motion.div>
@@ -379,7 +403,8 @@ export default function Home() {
             >
               <SimulationConsole
                 passengerData={passengerData}
-                initialProbability={prediction?.probability || 0.5}
+                prediction={prediction}
+                ready={!!passengerData}
               />
             </motion.div>
           )}
@@ -387,44 +412,26 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-border/50 mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <footer className="relative z-10 border-t border-slate-200 dark:border-slate-800 mt-16 md:mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
               <span>© 2026 Titanic AI</span>
               <span className="hidden md:inline">·</span>
-              <span className="hidden md:inline whitespace-nowrap text-xs text-gray-500">
-  <span>Built with</span>
-  <Heart size={12} className="text-red-500 fill-red-500 inline-block align-middle ml-1.5" />
-  <span className="ml-1.5">love by Samuel.K</span>
-</span>
+              <span className="hidden md:inline whitespace-nowrap text-xs">
+                <span>Built with</span>
+                <Heart size={12} className="text-red-500 fill-red-500 inline-block align-middle ml-1.5" />
+                <span className="ml-1.5">love by Samuel.K</span>
+              </span>
             </div>
             <div className="flex items-center gap-4">
-              <a
-                href="https://github.com/ethioel"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="GitHub"
-              >
+              <a href="https://github.com/ethioel" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" aria-label="GitHub">
                 <Github size={18} />
               </a>
-              <a
-                href="https://www.linkedin.com/in/samuel-kahsay"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="LinkedIn"
-              >
+              <a href="https://www.linkedin.com/in/samuel-kahsay" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" aria-label="LinkedIn">
                 <Linkedin size={18} />
               </a>
-              <a
-                href="https://twitter.com/ethioel"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="X / Twitter"
-              >
+              <a href="https://twitter.com/ethioel" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" aria-label="X / Twitter">
                 <Twitter size={18} />
               </a>
             </div>
