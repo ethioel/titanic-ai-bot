@@ -2,19 +2,6 @@ import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
 
-// Safe base64 encoder for binary data in Edge runtime
-function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const len = bytes.byteLength;
-  // Process in chunks to avoid stack overflow
-  for (let i = 0; i < len; i += 1024) {
-    const chunk = bytes.subarray(i, i + 1024);
-    binary += String.fromCharCode.apply(null, chunk);
-  }
-  return btoa(binary);
-}
-
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const survived = searchParams.get('survived') === 'true';
@@ -27,24 +14,10 @@ export async function GET(request) {
   const verb = survived ? 'SURVIVED' : 'PERISHED';
   const subtitle = pclass ? `${['','1st','2nd','3rd'][parseInt(pclass)]} Class` : 'RMS Titanic Passenger';
 
-  // ── Try to load background image from public/ ──
-  let bgDataUri = null;
-  try {
-    const bgUrl = new URL('/images/shared-card-bg.jpg', request.url).toString();
-    const res = await fetch(bgUrl, { cache: 'no-store' });
-    if (res.ok) {
-      const buf = await res.arrayBuffer();
-      const base64 = arrayBufferToBase64(buf);
-      bgDataUri = `data:image/jpeg;base64,${base64}`;
-    }
-  } catch (e) {
-    console.error('BG image load failed:', e);
-  }
-
-  // Color overlay
-  const overlay = survived
-    ? 'linear-gradient(135deg, rgba(6,78,59,0.88) 0%, rgba(6,95,70,0.78) 50%, rgba(4,120,87,0.88) 100%)'
-    : 'linear-gradient(135deg, rgba(127,29,29,0.88) 0%, rgba(153,27,27,0.78) 50%, rgba(185,28,28,0.88) 100%)';
+  // Nautical color palette — no external image needed
+  const bgGradient = survived
+    ? 'linear-gradient(160deg, #0f2e1d 0%, #1a4d33 30%, #0d3b2a 60%, #062d1f 100%)'
+    : 'linear-gradient(160deg, #2d0f0f 0%, #4d1a1a 30%, #3b0d0d 60%, #2d0606 100%)';
 
   return new ImageResponse(
     (
@@ -60,35 +33,58 @@ export async function GET(request) {
           color: 'white',
           padding: 60,
           position: 'relative',
-          // Fallback gradient
-          background: survived
-            ? 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)'
-            : 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 50%, #b91c1c 100%)',
+          background: bgGradient,
         }}
       >
-        {/* Background image — inlined as base64 so Satori can render it */}
-        {bgDataUri && (
-          <img
-            src={bgDataUri}
-            width={1200}
-            height={630}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              opacity: 0.45,
-            }}
-          />
-        )}
+        {/* ══ SVG Wave Pattern Overlay (no external image needed) ══ */}
+        <svg
+          width="1200"
+          height="630"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            opacity: 0.12,
+          }}
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <pattern id="waves" x="0" y="0" width="200" height="40" patternUnits="userSpaceOnUse">
+              <path
+                d="M0 20 Q25 5, 50 20 T100 20 T150 20 T200 20"
+                fill="none"
+                stroke="white"
+                strokeWidth="1.5"
+              />
+            </pattern>
+            <pattern id="stars" x="0" y="0" width="300" height="300" patternUnits="userSpaceOnUse">
+              <circle cx="50" cy="50" r="1" fill="white" opacity="0.6"/>
+              <circle cx="150" cy="120" r="0.8" fill="white" opacity="0.4"/>
+              <circle cx="250" cy="80" r="1.2" fill="white" opacity="0.5"/>
+              <circle cx="80" cy="200" r="0.6" fill="white" opacity="0.7"/>
+              <circle cx="220" cy="250" r="1" fill="white" opacity="0.3"/>
+              <circle cx="30" cy="280" r="0.9" fill="white" opacity="0.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#waves)" />
+          <rect width="100%" height="60%" fill="url(#stars)" />
+        </svg>
 
-        {/* Color overlay */}
+        {/* Vignette overlay */}
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: overlay,
+          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%)',
+        }} />
+
+        {/* Subtle border frame */}
+        <div style={{
+          position: 'absolute',
+          inset: 20,
+          border: '2px solid rgba(255,255,255,0.15)',
+          borderRadius: 12,
         }} />
 
         {/* Content */}
@@ -101,44 +97,62 @@ export async function GET(request) {
           width: '100%',
           zIndex: 1,
         }}>
-          <div style={{ fontSize: 90, marginBottom: 24, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }}>
+          {/* Decorative line */}
+          <div style={{
+            width: 80,
+            height: 3,
+            background: 'rgba(255,255,255,0.4)',
+            borderRadius: 2,
+            marginBottom: 24,
+          }} />
+
+          <div style={{ fontSize: 88, marginBottom: 20, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))' }}>
             {emoji}
           </div>
 
           <div style={{ 
-            fontSize: 52, 
+            fontSize: 50, 
             fontWeight: 800, 
             letterSpacing: '-0.02em', 
-            marginBottom: 12,
-            textShadow: '0 2px 24px rgba(0,0,0,0.7)',
+            marginBottom: 10,
+            textShadow: '0 4px 30px rgba(0,0,0,0.8)',
           }}>
             {name} {verb}
           </div>
 
-          <div style={{ fontSize: 24, opacity: 0.92, marginBottom: 8, fontWeight: 500 }}>
+          <div style={{ fontSize: 22, opacity: 0.85, marginBottom: 8, fontWeight: 500, letterSpacing: '0.05em' }}>
             {subtitle}
           </div>
 
-          <div style={{ fontSize: 36, fontWeight: 700, marginBottom: 36 }}>
-            {(prob * 100).toFixed(1)}% Survival Probability
+          <div style={{ 
+            fontSize: 42, 
+            fontWeight: 700, 
+            marginBottom: 8,
+            textShadow: '0 2px 20px rgba(0,0,0,0.6)',
+          }}>
+            {(prob * 100).toFixed(1)}%
+          </div>
+          <div style={{ fontSize: 14, opacity: 0.6, marginBottom: 36, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            Survival Probability
           </div>
 
           {twin && (
-            <div style={{ fontSize: 18, opacity: 0.85, fontStyle: 'italic', marginBottom: 28 }}>
+            <div style={{ fontSize: 17, opacity: 0.8, fontStyle: 'italic', marginBottom: 28 }}>
               Historical Twin: {twin}
             </div>
           )}
 
+          {/* Bottom branding */}
           <div style={{ 
-            fontSize: 16, 
-            opacity: 0.6,
-            borderTop: '1px solid rgba(255,255,255,0.25)',
-            paddingTop: 24,
-            width: '55%',
-            letterSpacing: '0.15em',
+            fontSize: 14, 
+            opacity: 0.5,
+            borderTop: '1px solid rgba(255,255,255,0.2)',
+            paddingTop: 20,
+            width: '45%',
+            letterSpacing: '0.2em',
             textTransform: 'uppercase',
           }}>
-            titanic-ai-bot.vercel.app
+            Titanic AI
           </div>
         </div>
       </div>
