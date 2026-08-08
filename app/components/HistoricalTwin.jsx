@@ -8,25 +8,20 @@ export default function HistoricalTwin({ passengerData, twinData, onRefresh, loa
   const normalizeTwin = (raw) => {
     if (!raw || typeof raw !== 'object') return null;
 
-    // API might return nested { twin: {...} } or flat
     const twin = raw.twin || raw;
     
-    // Handle pclass vs class, gender vs sex
     const pclass = twin.pclass ?? twin.class ?? 3;
     const sex = twin.sex ?? twin.gender ?? 'unknown';
     const age = twin.age ?? twin.Age ?? '?';
     const name = twin.name || 'Unknown Passenger';
     const survived = typeof twin.survived === 'boolean' ? twin.survived : false;
     
-    // Similarity might be 0.72 or 72
     let similarity = twin.similarity ?? raw.similarity ?? 0;
     if (similarity > 1) similarity = similarity / 100;
 
-    // Narrative might be in multiple places
     const narrative = raw.narrative || twin.narrative || twin.bio || twin.story || 
       `${name} was a ${age}-year-old ${sex} traveling in ${['', '1st', '2nd', '3rd'][pclass] || '3rd'} Class.`;
 
-    // Top matches: top_matches (snake) or topMatches (camel)
     const topMatchesRaw = raw.top_matches || raw.topMatches || [];
     const topMatches = Array.isArray(topMatchesRaw) ? topMatchesRaw : [];
 
@@ -80,7 +75,6 @@ export default function HistoricalTwin({ passengerData, twinData, onRefresh, loa
         <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full blur-2xl" />
         
         <div className="relative">
-          {/* Header: stacked on mobile, row on desktop */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
               {twin.name?.charAt(0) || '?'}
@@ -122,8 +116,8 @@ export default function HistoricalTwin({ passengerData, twinData, onRefresh, loa
             </div>
           </div>
 
-          {/* Narrative */}
-          <div className="prose dark:prose-invert prose-sm max-w-none text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+          {/* Narrative — REMOVED prose class, using explicit styling */}
+          <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap max-w-none">
             {twin.narrative}
           </div>
         </div>
