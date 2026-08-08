@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Head from 'next/head';
 import { 
   Ship, 
   Brain, 
@@ -26,6 +27,8 @@ import PassengerForm from './components/PassengerForm';
 import SimulationConsole from './components/SimulationConsole';
 import HistoricalTwin from './components/HistoricalTwin';
 import PredictionCard from './components/PredictionCard';
+import SurvivalReport from './components/SurvivalReport';
+import VoiceNarrator from './components/VoiceNarrator';
 import LoadingSpinner from './components/LoadingSpinner';
 
 const tabs = [
@@ -51,11 +54,24 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme } = useTheme();
 
-  // ── FIX: Accept explicit data so we never read stale state ──
+  // ── OG Image URL generator ──
+  const getShareImageUrl = (pred, pax) => {
+    if (!pred) return '/og-image.png';
+    const params = new URLSearchParams({
+      survived: String(pred.survived),
+      prob: String(pred.probability),
+      name: pax?.name || 'You',
+      ...(pax?.Pclass && { class: String(pax.Pclass) }),
+      ...(twin?.name && { twin: twin.name }),
+    });
+    return `/api/share?${params.toString()}`;
+  };
+
+  // ── Prediction ──
   const handlePredict = useCallback(async (explicitData) => {
     const payload = explicitData || passengerData;
     if (!payload) return;
-    
+
     setLoading(prev => ({ ...prev, predict: true }));
     try {
       const res = await fetch('/api/bot/predict', {
@@ -75,17 +91,16 @@ export default function Home() {
     }
   }, [passengerData]);
 
-  // ── FIX: Accept explicit data — avoids stale closure when called from form ──
+  // ── Twin ──
   const handleFindTwin = useCallback(async (explicitData) => {
     const payload = explicitData || passengerData;
     if (!payload) return;
-    
+
     setLoading(prev => ({ ...prev, twin: true }));
     try {
       const res = await fetch('/api/bot/twin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // ── FIX: Unified payload shape used across all routes ──
         body: JSON.stringify({ passenger_data: payload }),
       });
       const data = await res.json();
@@ -99,8 +114,29 @@ export default function Home() {
     }
   }, [passengerData]);
 
+  // ── Build share text ──
+  const buildShareText = () => {
+    if (!prediction) return '';
+    const url = typeof window !== 'undefined' ? window.location.href : 'https://titanic-ai-bot.vercel.app';
+    return `🚢 Titanic AI Survival Report\n\n${prediction.survived ? '✅ I SURVIVED!' : '❌ I DID NOT SURVIVE.'}\n📊 Probability: ${(prediction.probability * 100).toFixed(1)}%\n${twin?.name ? `👥 Twin: ${twin.name}` : ''}\n\n${url}`;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 overflow-x-hidden">
+      {/* Dynamic OG tags for results */}
+      {activeTab === 'results' && prediction && (
+        <Head>
+          <title>{`${passengerData?.name || 'You'} ${prediction.survived ? 'Survived' : 'Perished'} the Titanic`}</title>
+          <meta property="og:title" content={`${passengerData?.name || 'You'} ${prediction.survived ? 'Survived' : 'Perished'} the Titanic`} />
+          <meta property="og:description" content={`Survival probability: ${(prediction.probability * 100).toFixed(1)}%`} />
+          <meta property="og:image" content={getShareImageUrl(prediction, passengerData)} />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta property="twitter:card" content="summary_large_image" />
+          <meta property="twitter:image" content={getShareImageUrl(prediction, passengerData)} />
+        </Head>
+      )}
+
       {/* Animated background mesh */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-blue-500/5 via-transparent to-violet-500/5 dark:from-blue-500/10 dark:to-violet-500/10 rounded-full blur-3xl animate-pulse-slow" />
@@ -299,7 +335,6 @@ export default function Home() {
                         </div>
                       ))}
                     </div>
-                    {/* ── FIX: Pass fresh data explicitly ── */}
                     <button
                       onClick={() => handlePredict(passengerData)}
                       disabled={loading.predict}
@@ -331,16 +366,26 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="max-w-3xl mx-auto"
+              className="max-w-3xl mx-auto space-y-6"
             >
-              <PredictionCard
+              <PredictionCard prediction={prediction} />
+
+              {/* Voice Narrator */}
+              <div className="flex justify-center">
+                <VoiceNarrator 
+                  text={`You ${prediction.survived ? 'survived' : 'did not survive'} the Titanic with ${(prediction.probability * 100).toFixed(1)} percent probability. ${prediction.survived ? 'Congratulations, you made it to a lifeboat.' : 'Unfortunately, the odds were not in your favor.'}`}
+                  label="Hear Your Verdict"
+                />
+              </div>
+
+              {/* Survival Report Card */}
+              <SurvivalReport 
                 prediction={prediction}
-                onShare={() => {
-                  const text = `I ${prediction.survived ? 'survived' : 'perished'} the Titanic with ${(prediction.probability * 100).toFixed(1)}% survival probability — Titanic AI`;
-                  navigator.clipboard.writeText(text);
-                }}
+                twin={twin}
+                passenger={passengerData}
               />
-              <div className="mt-6 flex flex-col sm:flex-row justify-center gap-3">
+
+              <div className="flex flex-col sm:flex-row justify-center gap-3">
                 <button 
                   onClick={() => setActiveTab('twin')} 
                   className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
@@ -374,19 +419,27 @@ export default function Home() {
                   <Users size={20} className="text-violet-500" />
                   Find Your Twin
                 </h2>
-                {/* ── FIX: Pass fresh data directly into handleFindTwin ── */}
                 <PassengerForm 
                   onComplete={(data) => { setPassengerData(data); handleFindTwin(data); }} 
-                  compact 
                 />
               </div>
-              <div>
+              <div className="space-y-4">
                 <HistoricalTwin 
                   passengerData={passengerData} 
                   twinData={twin}
                   onRefresh={() => passengerData && handleFindTwin(passengerData)}
                   loading={loading.twin}
                 />
+
+                {/* Voice Narrator for Twin Story */}
+                {twin?.narrative && (
+                  <div className="flex justify-center pt-2">
+                    <VoiceNarrator 
+                      text={twin.narrative}
+                      label="Hear Their Story"
+                    />
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
