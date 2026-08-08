@@ -230,9 +230,27 @@ export default function PassengerForm({
             </h3>
             <div className="space-y-3">
               {[
-                { value: 'S', label: 'Southampton', desc: 'England, UK', emoji: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
-                { value: 'C', label: 'Cherbourg', desc: 'France', emoji: '🇫🇷' },
-                { value: 'Q', label: 'Queenstown', desc: 'Ireland', emoji: '🇮🇪' }
+                { 
+                  value: 'S', 
+                  label: 'Southampton', 
+                  desc: 'England, UK', 
+                  flag: 'GB-ENG',
+                  color: 'bg-red-600'
+                },
+                { 
+                  value: 'C', 
+                  label: 'Cherbourg', 
+                  desc: 'France', 
+                  flag: 'FR',
+                  color: 'bg-blue-700'
+                },
+                { 
+                  value: 'Q', 
+                  label: 'Queenstown', 
+                  desc: 'Ireland', 
+                  flag: 'IE',
+                  color: 'bg-green-600'
+                }
               ].map((port) => (
                 <button
                   key={port.value}
@@ -243,7 +261,10 @@ export default function PassengerForm({
                       : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                   }`}
                 >
-                  <span className="text-2xl">{port.emoji}</span>
+                  {/* Reliable flag badge — always renders */}
+                  <div className={`w-10 h-10 rounded-lg ${port.color} flex items-center justify-center text-white text-xs font-bold shadow-sm flex-shrink-0`}>
+                    {port.flag}
+                  </div>
                   <div>
                     <div className="font-medium text-gray-900 dark:text-gray-100">{port.label}</div>
                     <div className="text-sm text-gray-500 dark:text-gray-400">{port.desc}</div>
