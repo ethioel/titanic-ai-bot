@@ -3,44 +3,55 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, RefreshCw, Anchor, Heart, User, Sparkles, Loader2 } from 'lucide-react';
 
+/**
+ * Strips the "Other close matches" section from narrative text
+ * since we render those separately as styled cards.
+ */
+function cleanNarrative(text) {
+  if (!text) return '';
+  // Remove everything from "**Other close matches:**" onwards (case-insensitive)
+  const marker = /\*\*Other close matches:\*\*/i;
+  const idx = text.search(marker);
+  if (idx !== -1) {
+    return text.slice(0, idx).trim();
+  }
+  // Also handle variant without asterisks
+  const marker2 = /Other close matches:/i;
+  const idx2 = text.search(marker2);
+  if (idx2 !== -1) {
+    return text.slice(0, idx2).trim();
+  }
+  return text.trim();
+}
+
 export default function HistoricalTwin({ passengerData, twinData, onRefresh, loading }) {
-  // ── Normalize whatever shape the API returns ──
   const normalizeTwin = (raw) => {
     if (!raw || typeof raw !== 'object') return null;
-
     const twin = raw.twin || raw;
-    
+
     const pclass = twin.pclass ?? twin.class ?? 3;
     const sex = twin.sex ?? twin.gender ?? 'unknown';
     const age = twin.age ?? twin.Age ?? '?';
     const name = twin.name || 'Unknown Passenger';
     const survived = typeof twin.survived === 'boolean' ? twin.survived : false;
-    
+
     let similarity = twin.similarity ?? raw.similarity ?? 0;
     if (similarity > 1) similarity = similarity / 100;
 
-    const narrative = raw.narrative || twin.narrative || twin.bio || twin.story || 
+    // Clean the narrative — remove embedded "Other close matches" text
+    const rawNarrative = raw.narrative || twin.narrative || twin.bio || twin.story || 
       `${name} was a ${age}-year-old ${sex} traveling in ${['', '1st', '2nd', '3rd'][pclass] || '3rd'} Class.`;
+    const narrative = cleanNarrative(rawNarrative);
 
     const topMatchesRaw = raw.top_matches || raw.topMatches || [];
     const topMatches = Array.isArray(topMatchesRaw) ? topMatchesRaw : [];
 
-    return {
-      name,
-      age,
-      sex,
-      pclass,
-      survived,
-      similarity,
-      narrative,
-      topMatches,
-    };
+    return { name, age, sex, pclass, survived, similarity, narrative, topMatches };
   };
 
   const twin = normalizeTwin(twinData);
   const classNames = { 1: '1st Class', 2: '2nd Class', 3: '3rd Class' };
 
-  // ── Loading ──
   if (loading) {
     return (
       <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
@@ -52,7 +63,6 @@ export default function HistoricalTwin({ passengerData, twinData, onRefresh, loa
     );
   }
 
-  // ── Empty ──
   if (!twin) {
     return (
       <div className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
@@ -73,13 +83,13 @@ export default function HistoricalTwin({ passengerData, twinData, onRefresh, loa
       {/* ═══ Main Twin Card ═══ */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 md:p-6 relative overflow-hidden shadow-sm">
         <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full blur-2xl" />
-        
+
         <div className="relative">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
               {twin.name?.charAt(0) || '?'}
             </div>
-            
+
             <div className="flex-1 min-w-0">
               <h3 className="font-bold text-lg text-slate-900 dark:text-white truncate">
                 {twin.name}
@@ -88,7 +98,7 @@ export default function HistoricalTwin({ passengerData, twinData, onRefresh, loa
                 {twin.age} years old · <span className="capitalize">{twin.sex}</span> · {classNames[twin.pclass] || `Class ${twin.pclass}`}
               </p>
             </div>
-            
+
             <div className={`self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold border ${
               twin.survived 
                 ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' 
@@ -116,14 +126,14 @@ export default function HistoricalTwin({ passengerData, twinData, onRefresh, loa
             </div>
           </div>
 
-          {/* Narrative — REMOVED prose class, using explicit styling */}
+          {/* Narrative — cleaned, no duplicate matches */}
           <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap max-w-none">
             {twin.narrative}
           </div>
         </div>
       </div>
 
-      {/* ═══ Top Matches ═══ */}
+      {/* ═══ Top Matches — styled card, ONLY ONCE ═══ */}
       <AnimatePresence>
         {twin.topMatches.length > 0 && (
           <motion.div
@@ -140,10 +150,10 @@ export default function HistoricalTwin({ passengerData, twinData, onRefresh, loa
                 const mSurvived = match.survived ?? false;
                 const mName = match.name || 'Unknown';
                 const mAge = match.age ?? '?';
-                
+
                 return (
                   <div 
-                    key={i} 
+                    key={`match-${i}`} 
                     className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-3 py-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
                   >
                     <div className="flex items-center gap-2 min-w-0">
