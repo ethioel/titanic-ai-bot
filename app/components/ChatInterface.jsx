@@ -23,6 +23,8 @@ export default function ChatInterface() {
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const hasMounted = useRef(false);          // ← guard for init scroll
+  const isFirstScroll = useRef(true);        // ← guard for auto-scroll
 
   // ── Init Session ──
   useEffect(() => {
@@ -41,11 +43,17 @@ export default function ChatInterface() {
       actions: []
     }]);
 
-    setTimeout(() => inputRef.current?.focus(), 300);
+    // ── FIX: Removed setTimeout(() => inputRef.current?.focus(), 300);
+    // Focusing the input on mount causes the page to scroll down to it.
   }, []);
 
   // ── Auto-scroll ──
   useEffect(() => {
+    // ── FIX: Skip scroll on initial render / first messages population ──
+    if (isFirstScroll.current) {
+      isFirstScroll.current = false;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, typing]);
 
@@ -96,7 +104,6 @@ export default function ChatInterface() {
           action: data.action
         }]);
 
-        // ── FIX: Pass fresh passenger_data directly, avoid stale closure ──
         if (data.action === 'show_twin') fetchTwin(data.passenger_data);
         if (data.action === 'start_simulation') {
           const baseProb = data.prediction?.probability || 0.5;
@@ -115,6 +122,7 @@ export default function ChatInterface() {
       }]);
     } finally {
       setLoading(false);
+      // ── FIX: Only focus after user sends a message, not on mount ──
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [input, loading, sessionId, passengerData]);
@@ -126,11 +134,9 @@ export default function ChatInterface() {
     }
   };
 
-  // ── FIX: fetchTwin accepts explicit data to avoid stale state ──
   const fetchTwin = async (explicitData) => {
     const payload = explicitData || passengerData;
-    
-    // Defensive: if we have nothing, show error immediately
+
     if (!payload || Object.keys(payload).length === 0) {
       setMessages(prev => [...prev, {
         id: `twin_err_${Date.now()}`,
@@ -147,12 +153,11 @@ export default function ChatInterface() {
         session_id: sessionId,
         passenger_data: payload
       });
-      
-      // Defensive: if API returns error field
+
       if (data.error) throw new Error(data.error);
-      
+
       const narrative = data.narrative || 'No historical match found.';
-      
+
       setMessages(prev => [...prev, {
         id: `twin_${Date.now()}`,
         type: 'twin',
@@ -182,9 +187,9 @@ export default function ChatInterface() {
         start: true,
         initial_probability: baseProb
       });
-      
+
       if (data.state) setSimState(data.state);
-      
+
       setMessages(prev => [...prev, {
         id: `sim_${Date.now()}`,
         type: 'simulation',
@@ -218,17 +223,17 @@ export default function ChatInterface() {
     try {
       setLoading(true);
       const currentProb = simProbability !== null ? simProbability : (prediction?.probability || 0.5);
-      
+
       const { data } = await axios.post('/api/bot/simulate', {
         session_id: sessionId,
         decision_id: decisionId,
         state: simState,
         current_probability: currentProb
       });
-      
+
       if (data.state) setSimState(data.state);
       if (data.survival_probability !== undefined) setSimProbability(data.survival_probability);
-      
+
       setMessages(prev => [...prev, {
         id: `sim_${Date.now()}`,
         type: data.complete ? 'sim_result' : 'simulation',
@@ -298,17 +303,16 @@ export default function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
-      
-      {/* ═══ NO HEADER ═══ */}
-      
+    // ── FIX: Changed h-screen → h-[600px] so it doesn't force full viewport ──
+    <div className="flex flex-col h-[600px] bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+
       {/* ═══ MESSAGES ═══ */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
         <AnimatePresence initial={false}>
           {messages.map((msg) => {
             const cfg = avatarConfig[msg.type] || avatarConfig.bot;
             const isUser = msg.type === 'user';
-            
+
             return (
               <motion.div
                 key={msg.id}
@@ -335,7 +339,7 @@ export default function ChatInterface() {
                       ? 'bg-green-50 dark:bg-green-900/20 text-green-900 dark:text-green-100 border border-green-200 dark:border-green-800 rounded-bl-md'
                       : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-bl-md'
                   }`}>
-                    
+
                     <div className="text-sm leading-relaxed whitespace-pre-wrap">
                       {renderText(msg.content)}
                     </div>
@@ -430,7 +434,7 @@ export default function ChatInterface() {
                       </div>
                     )}
                   </div>
-                  
+
                   <span className="text-[10px] text-slate-400 dark:text-slate-600 mt-1 px-1 block">
                     {fmtTime(msg.timestamp)}
                   </span>
