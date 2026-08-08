@@ -2,18 +2,57 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, Square, Volume2, VolumeX, AudioLines } from 'lucide-react';
+import { Play, Pause, Square, Volume2, VolumeX } from 'lucide-react';
 
 /**
- * VoiceNarrator — Reads any text aloud using Web Speech API
- * (Free, built into all modern browsers. No API key needed.)
- * 
- * Usage:
- *   <VoiceNarrator 
- *     text={twin.narrative} 
- *     label="Hear your twin's story"
- *   />
+ * Cleans text for speech synthesis — strips markdown, expands abbreviations.
  */
+function sanitizeForSpeech(text) {
+  if (!text) return '';
+
+  return text
+    // Strip markdown bold/italic
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/_(.*?)_/g, '$1')
+    // Strip markdown headers
+    .replace(/^#{1,6}\s*/gm, '')
+    // Strip links [text](url) → text
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+    // Strip raw URLs
+    .replace(/https?:\/\/\S+/g, '')
+    // Expand common abbreviations
+    .replace(/\b(\d+)y\b/gi, '$1 years')
+    .replace(/\b(\d+)m\b/gi, '$1 months')
+    .replace(/\b(\d+)d\b/gi, '$1 days')
+    .replace(/\b(\d+)h\b/gi, '$1 hours')
+    .replace(/\b(\d+)min\b/gi, '$1 minutes')
+    .replace(/\bDr\.\b/g, 'Doctor')
+    .replace(/\bMr\.\b/g, 'Mister')
+    .replace(/\bMrs\.\b/g, 'Misses')
+    .replace(/\bMs\.\b/g, 'Miss')
+    .replace(/\bSt\.\b/g, 'Saint')
+    .replace(/\b Ave\.\b/g, ' Avenue')
+    .replace(/\b St\.\b/g, ' Street')
+    .replace(/\b Rd\.\b/g, ' Road')
+    // Replace symbols with words
+    .replace(/#/g, 'number ')
+    .replace(/@/g, ' at ')
+    .replace(/&/g, ' and ')
+    .replace(/%/g, ' percent ')
+    .replace(/\$/g, ' dollars ')
+    .replace(/£/g, ' pounds ')
+    .replace(/€/g, ' euros ')
+    .replace(/→/g, ' to ')
+    .replace(/←/g, ' from ')
+    .replace(/↑/g, ' up ')
+    .replace(/↓/g, ' down ')
+    // Clean up multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export default function VoiceNarrator({ 
   text, 
   label = 'Listen',
@@ -27,13 +66,15 @@ export default function VoiceNarrator({
   const wordsRef = useRef([]);
   const wordIndexRef = useRef(0);
 
+  // Sanitize text once
+  const cleanText = sanitizeForSpeech(text);
+
   useEffect(() => {
     if (!('speechSynthesis' in window)) {
       setSupported(false);
     }
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (window.speechSynthesis) {
@@ -43,16 +84,15 @@ export default function VoiceNarrator({
   }, []);
 
   const speak = useCallback(() => {
-    if (!text || !window.speechSynthesis) return;
+    if (!cleanText || !window.speechSynthesis) return;
 
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.92;      // Slightly slower for gravitas
-    utterance.pitch = 0.95;     // Slightly deeper
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.92;
+    utterance.pitch = 0.95;
     utterance.volume = 1;
 
-    // Try to pick a good English voice
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(v => 
       v.name.includes('Google UK English Male') ||
@@ -64,7 +104,7 @@ export default function VoiceNarrator({
     utterance.onstart = () => {
       setSpeaking(true);
       setPaused(false);
-      wordsRef.current = text.split(/\s+/);
+      wordsRef.current = cleanText.split(/\s+/);
       wordIndexRef.current = 0;
     };
 
@@ -92,7 +132,7 @@ export default function VoiceNarrator({
 
     utteranceRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  }, [text]);
+  }, [cleanText]);
 
   const pause = () => {
     window.speechSynthesis.pause();
@@ -118,6 +158,10 @@ export default function VoiceNarrator({
         Voice not supported in this browser
       </div>
     );
+  }
+
+  if (!cleanText) {
+    return null;
   }
 
   return (
@@ -155,19 +199,12 @@ export default function VoiceNarrator({
             exit={{ opacity: 0, scale: 0.8 }}
             className="inline-flex items-center gap-2"
           >
-            {/* Audio visualizer */}
             <div className="flex items-center gap-0.5 h-6">
               {[...Array(5)].map((_, i) => (
                 <motion.div
                   key={i}
-                  animate={{ 
-                    height: speaking && !paused ? [4, 16 + Math.random() * 8, 4] : 4 
-                  }}
-                  transition={{ 
-                    repeat: Infinity, 
-                    duration: 0.4 + i * 0.1,
-                    ease: "easeInOut"
-                  }}
+                  animate={{ height: speaking && !paused ? [4, 16 + Math.random() * 8, 4] : 4 }}
+                  transition={{ repeat: Infinity, duration: 0.4 + i * 0.1, ease: "easeInOut" }}
                   className="w-1 bg-blue-500 dark:bg-blue-400 rounded-full"
                 />
               ))}
@@ -191,7 +228,6 @@ export default function VoiceNarrator({
         )}
       </AnimatePresence>
 
-      {/* Word highlight */}
       <AnimatePresence>
         {speaking && currentWord && (
           <motion.span
