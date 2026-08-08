@@ -1,7 +1,3 @@
-"""
-TitanicEnsemble — Stacking Classifier with 5 base models + LR meta-learner.
-Typical CV AUC: 0.88–0.90  |  Accuracy: 84–86%
-"""
 from __future__ import annotations
 
 import logging
