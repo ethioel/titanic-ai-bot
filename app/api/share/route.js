@@ -2,20 +2,6 @@ import { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
 
-// Helper: fetch image and convert to base64 data URI
-async function fetchImageAsBase64(url) {
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return null;
-    const buf = await res.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-    const contentType = res.headers.get('content-type') || 'image/jpeg';
-    return `data:${contentType};base64,${base64}`;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const survived = searchParams.get('survived') === 'true';
@@ -28,13 +14,13 @@ export async function GET(request) {
   const verb = survived ? 'SURVIVED' : 'PERISHED';
   const subtitle = pclass ? `${['','1st','2nd','3rd'][parseInt(pclass)]} Class` : 'RMS Titanic Passenger';
 
-  // Try to load background image from public/
-  const bgUrl = new URL('/images/shared-card-bg.jpg', request.url).toString();
-  const bgDataUri = await fetchImageAsBase64(bgUrl);
+  // Build absolute URL to the background image
+  const bgUrl = new URL('public/images/shared-card-bg.jpg', request.url).toString();
 
-  const overlayColor = survived
-    ? 'rgba(6,78,59,0.82)'
-    : 'rgba(127,29,29,0.82)';
+  // Color overlay based on result
+  const overlay = survived
+    ? 'linear-gradient(135deg, rgba(6,78,59,0.88) 0%, rgba(6,95,70,0.78) 50%, rgba(4,120,87,0.88) 100%)'
+    : 'linear-gradient(135deg, rgba(127,29,29,0.88) 0%, rgba(153,27,27,0.78) 50%, rgba(185,28,28,0.88) 100%)';
 
   return new ImageResponse(
     (
@@ -50,37 +36,33 @@ export async function GET(request) {
           color: 'white',
           padding: 60,
           position: 'relative',
-          // Use fetched image if available, else dark gradient
-          background: bgDataUri
-            ? `#0d1b2a`
-            : survived
-              ? 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)'
-              : 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 50%, #b91c1c 100%)',
+          // Solid fallback gradient — always visible even if image fails
+          background: survived
+            ? 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)'
+            : 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 50%, #b91c1c 100%)',
         }}
       >
-        {/* Background image layer — Satori supports <img> positioned absolutely */}
-        {bgDataUri && (
-          <img
-            src={bgDataUri}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              opacity: 0.35,
-            }}
-          />
-        )}
+        {/* Background image — Satori supports <img> with external URLs */}
+        <img
+          src={bgUrl}
+          width={1200}
+          height={630}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            opacity: 0.4,
+          }}
+        />
 
         {/* Color overlay */}
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: bgDataUri
-            ? `linear-gradient(135deg, ${overlayColor} 0%, ${survived ? 'rgba(6,95,70,0.70)' : 'rgba(153,27,27,0.70)'} 50%, ${overlayColor} 100%)`
-            : 'transparent',
+          background: overlay,
         }} />
 
         {/* Content */}
@@ -93,7 +75,7 @@ export async function GET(request) {
           width: '100%',
           zIndex: 1,
         }}>
-          <div style={{ fontSize: 90, marginBottom: 24, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.4))' }}>
+          <div style={{ fontSize: 90, marginBottom: 24, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }}>
             {emoji}
           </div>
 
@@ -102,7 +84,7 @@ export async function GET(request) {
             fontWeight: 800, 
             letterSpacing: '-0.02em', 
             marginBottom: 12,
-            textShadow: '0 2px 20px rgba(0,0,0,0.6)',
+            textShadow: '0 2px 24px rgba(0,0,0,0.7)',
           }}>
             {name} {verb}
           </div>
@@ -111,7 +93,7 @@ export async function GET(request) {
             {subtitle}
           </div>
 
-          <div style={{ fontSize: 34, fontWeight: 700, marginBottom: 36 }}>
+          <div style={{ fontSize: 36, fontWeight: 700, marginBottom: 36 }}>
             {(prob * 100).toFixed(1)}% Survival Probability
           </div>
 
@@ -123,7 +105,7 @@ export async function GET(request) {
 
           <div style={{ 
             fontSize: 16, 
-            opacity: 0.65,
+            opacity: 0.6,
             borderTop: '1px solid rgba(255,255,255,0.25)',
             paddingTop: 24,
             width: '55%',
