@@ -13,7 +13,9 @@ import {
   Sparkles,
   AlertCircle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export default function PredictionCard({ 
@@ -25,6 +27,7 @@ export default function PredictionCard({
 }) {
   const [showExplanations, setShowExplanations] = useState(false);
   const [showCounterfactuals, setShowCounterfactuals] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { 
     survived, 
@@ -69,6 +72,36 @@ export default function PredictionCard({
     return 'Low Confidence';
   };
 
+  // ── FIX: Robust share with fallback + visual feedback ──
+  const handleShare = async () => {
+    const text = `I ${survived ? 'survived' : 'perished'} the Titanic with ${(probability * 100).toFixed(1)}% survival probability — Titanic AI`;
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for HTTP / older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!successful) throw new Error('execCommand failed');
+      }
+
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      onShare?.();
+    } catch (err) {
+      console.error('Share failed:', err);
+      alert('Could not copy to clipboard. Please copy manually.');
+    }
+  };
+
   return (
     <div className={`bg-white dark:bg-gray-900 rounded-xl shadow-lg overflow-hidden ${className}`}>
       {/* Header */}
@@ -91,12 +124,18 @@ export default function PredictionCard({
               </p>
             </div>
           </div>
+
+          {/* ── FIX: Share button with copied state ── */}
           <button
-            onClick={onShare}
-            className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg text-gray-700 dark:text-gray-200 text-sm transition-colors flex items-center gap-1"
+            onClick={handleShare}
+            className={`px-3 py-1.5 rounded-lg text-sm transition-all duration-200 flex items-center gap-1.5 ${
+              copied
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
+                : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
+            }`}
           >
-            <Share2 size={16} />
-            Share
+            {copied ? <Check size={16} /> : <Share2 size={16} />}
+            {copied ? 'Copied!' : 'Share'}
           </button>
         </div>
       </div>
@@ -156,7 +195,7 @@ export default function PredictionCard({
             </div>
             {showExplanations ? <ChevronUp size={18} className="text-gray-500 dark:text-gray-400" /> : <ChevronDown size={18} className="text-gray-500 dark:text-gray-400" />}
           </button>
-          
+
           <AnimatePresence>
             {showExplanations && (
               <motion.div
@@ -205,7 +244,7 @@ export default function PredictionCard({
             </div>
             {showCounterfactuals ? <ChevronUp size={18} className="text-gray-500 dark:text-gray-400" /> : <ChevronDown size={18} className="text-gray-500 dark:text-gray-400" />}
           </button>
-          
+
           <AnimatePresence>
             {showCounterfactuals && (
               <motion.div
