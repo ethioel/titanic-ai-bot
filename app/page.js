@@ -28,6 +28,7 @@ import HistoricalTwin from './components/HistoricalTwin';
 import PredictionCard from './components/PredictionCard';
 import SurvivalReport from './components/SurvivalReport';
 import VoiceNarrator from './components/VoiceNarrator';
+import WikipediaPreview from './components/WikipediaPreview';
 import LoadingSpinner from './components/LoadingSpinner';
 
 const tabs = [
@@ -404,6 +405,11 @@ export default function Home() {
                   twinData={twin}
                   onRefresh={() => passengerData && handleFindTwin(passengerData)}
                   loading={loading.twin}
+                />
+
+                <WikipediaPreview 
+                  name={twin?.name || passengerData?.name} 
+                  className="mt-2"
                 />
 
                 {twin?.narrative && (
