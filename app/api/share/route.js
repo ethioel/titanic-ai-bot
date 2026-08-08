@@ -14,10 +14,28 @@ export async function GET(request) {
   const verb = survived ? 'SURVIVED' : 'PERISHED';
   const subtitle = pclass ? `${['','1st','2nd','3rd'][parseInt(pclass)]} Class` : 'RMS Titanic Passenger';
 
-  // Nautical color palette — no external image needed
-  const bgGradient = survived
-    ? 'linear-gradient(160deg, #0f2e1d 0%, #1a4d33 30%, #0d3b2a 60%, #062d1f 100%)'
-    : 'linear-gradient(160deg, #2d0f0f 0%, #4d1a1a 30%, #3b0d0d 60%, #2d0606 100%)';
+  // Deep nautical gradient — no external assets
+  const bg = survived
+    ? 'linear-gradient(160deg, #0a1f14 0%, #143d28 25%, #1a4d33 50%, #0f2e1d 75%, #0a1f14 100%)'
+    : 'linear-gradient(160deg, #1f0a0a 0%, #3d1414 25%, #4d1a1a 50%, #2e0f0f 75%, #1f0a0a 100%)';
+
+  // Decorative stars as simple positioned divs (Satori-compatible)
+  const stars = [
+    { top: 40, left: 80, size: 3, opacity: 0.5 },
+    { top: 80, left: 200, size: 2, opacity: 0.3 },
+    { top: 120, left: 350, size: 4, opacity: 0.4 },
+    { top: 60, left: 500, size: 2, opacity: 0.6 },
+    { top: 150, left: 650, size: 3, opacity: 0.35 },
+    { top: 90, left: 800, size: 2, opacity: 0.5 },
+    { top: 130, left: 950, size: 3, opacity: 0.4 },
+    { top: 50, left: 1100, size: 2, opacity: 0.6 },
+    { top: 100, left: 180, size: 2, opacity: 0.3 },
+    { top: 70, left: 420, size: 3, opacity: 0.45 },
+    { top: 140, left: 580, size: 2, opacity: 0.35 },
+    { top: 110, left: 750, size: 4, opacity: 0.5 },
+    { top: 55, left: 900, size: 2, opacity: 0.4 },
+    { top: 125, left: 1050, size: 3, opacity: 0.3 },
+  ];
 
   return new ImageResponse(
     (
@@ -33,58 +51,48 @@ export async function GET(request) {
           color: 'white',
           padding: 60,
           position: 'relative',
-          background: bgGradient,
+          background: bg,
         }}
       >
-        {/* ══ SVG Wave Pattern Overlay (no external image needed) ══ */}
-        <svg
-          width="1200"
-          height="630"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            opacity: 0.12,
-          }}
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <defs>
-            <pattern id="waves" x="0" y="0" width="200" height="40" patternUnits="userSpaceOnUse">
-              <path
-                d="M0 20 Q25 5, 50 20 T100 20 T150 20 T200 20"
-                fill="none"
-                stroke="white"
-                strokeWidth="1.5"
-              />
-            </pattern>
-            <pattern id="stars" x="0" y="0" width="300" height="300" patternUnits="userSpaceOnUse">
-              <circle cx="50" cy="50" r="1" fill="white" opacity="0.6"/>
-              <circle cx="150" cy="120" r="0.8" fill="white" opacity="0.4"/>
-              <circle cx="250" cy="80" r="1.2" fill="white" opacity="0.5"/>
-              <circle cx="80" cy="200" r="0.6" fill="white" opacity="0.7"/>
-              <circle cx="220" cy="250" r="1" fill="white" opacity="0.3"/>
-              <circle cx="30" cy="280" r="0.9" fill="white" opacity="0.5"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#waves)" />
-          <rect width="100%" height="60%" fill="url(#stars)" />
-        </svg>
+        {/* Stars — rendered as simple white circles */}
+        {stars.map((s, i) => (
+          <div
+            key={i}
+            style={{
+              position: 'absolute',
+              top: s.top,
+              left: s.left,
+              width: s.size,
+              height: s.size,
+              borderRadius: '50%',
+              background: `rgba(255,255,255,${s.opacity})`,
+            }}
+          />
+        ))}
 
-        {/* Vignette overlay */}
+        {/* Vignette */}
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.6) 100%)',
         }} />
 
-        {/* Subtle border frame */}
+        {/* Border frame */}
         <div style={{
           position: 'absolute',
-          inset: 20,
-          border: '2px solid rgba(255,255,255,0.15)',
-          borderRadius: 12,
+          inset: 24,
+          border: '1.5px solid rgba(255,255,255,0.12)',
+          borderRadius: 10,
+        }} />
+
+        {/* Top decorative line */}
+        <div style={{
+          position: 'absolute',
+          top: 55,
+          width: 100,
+          height: 2,
+          background: 'rgba(255,255,255,0.3)',
+          borderRadius: 1,
         }} />
 
         {/* Content */}
@@ -97,21 +105,12 @@ export async function GET(request) {
           width: '100%',
           zIndex: 1,
         }}>
-          {/* Decorative line */}
-          <div style={{
-            width: 80,
-            height: 3,
-            background: 'rgba(255,255,255,0.4)',
-            borderRadius: 2,
-            marginBottom: 24,
-          }} />
-
-          <div style={{ fontSize: 88, marginBottom: 20, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))' }}>
+          <div style={{ fontSize: 84, marginBottom: 18, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))' }}>
             {emoji}
           </div>
 
           <div style={{ 
-            fontSize: 50, 
+            fontSize: 48, 
             fontWeight: 800, 
             letterSpacing: '-0.02em', 
             marginBottom: 10,
@@ -120,35 +119,35 @@ export async function GET(request) {
             {name} {verb}
           </div>
 
-          <div style={{ fontSize: 22, opacity: 0.85, marginBottom: 8, fontWeight: 500, letterSpacing: '0.05em' }}>
+          <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 8, fontWeight: 500, letterSpacing: '0.05em' }}>
             {subtitle}
           </div>
 
           <div style={{ 
-            fontSize: 42, 
+            fontSize: 40, 
             fontWeight: 700, 
-            marginBottom: 8,
+            marginBottom: 6,
             textShadow: '0 2px 20px rgba(0,0,0,0.6)',
           }}>
             {(prob * 100).toFixed(1)}%
           </div>
-          <div style={{ fontSize: 14, opacity: 0.6, marginBottom: 36, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+          <div style={{ fontSize: 13, opacity: 0.55, marginBottom: 32, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
             Survival Probability
           </div>
 
           {twin && (
-            <div style={{ fontSize: 17, opacity: 0.8, fontStyle: 'italic', marginBottom: 28 }}>
+            <div style={{ fontSize: 16, opacity: 0.75, fontStyle: 'italic', marginBottom: 24 }}>
               Historical Twin: {twin}
             </div>
           )}
 
-          {/* Bottom branding */}
+          {/* Bottom line */}
           <div style={{ 
-            fontSize: 14, 
-            opacity: 0.5,
-            borderTop: '1px solid rgba(255,255,255,0.2)',
-            paddingTop: 20,
-            width: '45%',
+            fontSize: 13, 
+            opacity: 0.45,
+            borderTop: '1px solid rgba(255,255,255,0.18)',
+            paddingTop: 18,
+            width: '40%',
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
           }}>
