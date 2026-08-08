@@ -17,8 +17,7 @@ import {
   Linkedin,
   Heart,
   Zap,
-  Shield,
-  BarChart3
+  Shield
 } from 'lucide-react';
 import { useTheme } from './components/ThemeProvider';
 import ThemeToggle from './components/ThemeToggle';
@@ -54,7 +53,6 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme } = useTheme();
 
-  // ── OG Image URL generator ──
   const getShareImageUrl = (pred, pax) => {
     if (!pred) return '/og-image.png';
     const params = new URLSearchParams({
@@ -67,7 +65,6 @@ export default function Home() {
     return `/api/share?${params.toString()}`;
   };
 
-  // ── Prediction ──
   const handlePredict = useCallback(async (explicitData) => {
     const payload = explicitData || passengerData;
     if (!payload) return;
@@ -91,7 +88,6 @@ export default function Home() {
     }
   }, [passengerData]);
 
-  // ── Twin ──
   const handleFindTwin = useCallback(async (explicitData) => {
     const payload = explicitData || passengerData;
     if (!payload) return;
@@ -114,16 +110,8 @@ export default function Home() {
     }
   }, [passengerData]);
 
-  // ── Build share text ──
-  const buildShareText = () => {
-    if (!prediction) return '';
-    const url = typeof window !== 'undefined' ? window.location.href : 'https://titanic-ai-bot.vercel.app';
-    return `🚢 Titanic AI Survival Report\n\n${prediction.survived ? '✅ I SURVIVED!' : '❌ I DID NOT SURVIVE.'}\n📊 Probability: ${(prediction.probability * 100).toFixed(1)}%\n${twin?.name ? `👥 Twin: ${twin.name}` : ''}\n\n${url}`;
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 overflow-x-hidden">
-      {/* Dynamic OG tags for results */}
       {activeTab === 'results' && prediction && (
         <Head>
           <title>{`${passengerData?.name || 'You'} ${prediction.survived ? 'Survived' : 'Perished'} the Titanic`}</title>
@@ -137,17 +125,14 @@ export default function Home() {
         </Head>
       )}
 
-      {/* Animated background mesh */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-blue-500/5 via-transparent to-violet-500/5 dark:from-blue-500/10 dark:to-violet-500/10 rounded-full blur-3xl animate-pulse-slow" />
         <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-indigo-500/5 via-transparent to-cyan-500/5 dark:from-indigo-500/10 dark:to-cyan-500/10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '2s' }} />
       </div>
 
-      {/* Header */}
       <header className="sticky top-0 z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo */}
             <div className="flex items-center gap-3">
               <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 dark:from-amber-500 dark:to-orange-600 flex items-center justify-center shadow-lg">
                 <Ship size={18} className="text-white" />
@@ -159,7 +144,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Desktop Nav */}
             <nav className="hidden md:flex items-center gap-1">
               {tabs.map((tab) => (
                 <button
@@ -186,7 +170,6 @@ export default function Home() {
               ))}
             </nav>
 
-            {/* Actions */}
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <button
@@ -199,7 +182,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Mobile Nav */}
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.div
@@ -229,9 +211,7 @@ export default function Home() {
         </AnimatePresence>
       </header>
 
-      {/* Main */}
       <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10">
-        {/* Hero */}
         <div className="text-center mb-10 md:mb-14 space-y-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -253,7 +233,6 @@ export default function Home() {
             </p>
           </motion.div>
 
-          {/* Stats */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -270,9 +249,7 @@ export default function Home() {
           </motion.div>
         </div>
 
-        {/* Content */}
         <AnimatePresence mode="wait">
-          {/* CHAT TAB */}
           {activeTab === 'chat' && (
             <motion.div
               key="chat"
@@ -286,7 +263,6 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* PREDICT TAB */}
           {activeTab === 'predict' && (
             <motion.div
               key="predict"
@@ -358,7 +334,6 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* RESULTS TAB */}
           {activeTab === 'results' && prediction && (
             <motion.div
               key="results"
@@ -368,6 +343,7 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className="max-w-3xl mx-auto space-y-6"
             >
+              {/* Prediction result card — NO share button here */}
               <PredictionCard prediction={prediction} />
 
               {/* Voice Narrator */}
@@ -378,7 +354,7 @@ export default function Home() {
                 />
               </div>
 
-              {/* Survival Report Card */}
+              {/* Survival Report — this is the ONLY share UI */}
               <SurvivalReport 
                 prediction={prediction}
                 twin={twin}
@@ -404,7 +380,6 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* TWIN TAB */}
           {activeTab === 'twin' && (
             <motion.div
               key="twin"
@@ -431,7 +406,6 @@ export default function Home() {
                   loading={loading.twin}
                 />
 
-                {/* Voice Narrator for Twin Story */}
                 {twin?.narrative && (
                   <div className="flex justify-center pt-2">
                     <VoiceNarrator 
@@ -444,7 +418,6 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* SIMULATE TAB */}
           {activeTab === 'simulate' && (
             <motion.div
               key="simulate"
@@ -464,7 +437,6 @@ export default function Home() {
         </AnimatePresence>
       </main>
 
-      {/* Footer */}
       <footer className="relative z-10 border-t border-slate-200 dark:border-slate-800 mt-16 md:mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
