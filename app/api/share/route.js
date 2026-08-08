@@ -29,7 +29,7 @@ export async function GET(request) {
   const subtitle = pclass ? `${['','1st','2nd','3rd'][parseInt(pclass)]} Class` : 'RMS Titanic Passenger';
 
   // Try to load background image from public/
-  const bgUrl = new URL('/image/shared-card-bg.jpg', request.url).toString();
+  const bgUrl = new URL('/images/shared-card-bg.jpg', request.url).toString();
   const bgDataUri = await fetchImageAsBase64(bgUrl);
 
   const overlayColor = survived
