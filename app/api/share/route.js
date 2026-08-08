@@ -1,4 +1,4 @@
-import { ImageResponse } from 'next/og';
+mport { ImageResponse } from 'next/og';
 
 export const runtime = 'edge';
 
