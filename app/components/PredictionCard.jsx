@@ -8,26 +8,20 @@ import {
   TrendingUp, 
   TrendingDown,
   Info,
-  Share2,
-  Users,
   Sparkles,
   AlertCircle,
   ChevronDown,
-  ChevronUp,
-  Copy,
-  Check
+  ChevronUp
 } from 'lucide-react';
 
 export default function PredictionCard({ 
   prediction, 
   explanations = [],
   counterfactuals = [],
-  onShare,
   className = '' 
 }) {
   const [showExplanations, setShowExplanations] = useState(false);
   const [showCounterfactuals, setShowCounterfactuals] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const { 
     survived, 
@@ -72,36 +66,6 @@ export default function PredictionCard({
     return 'Low Confidence';
   };
 
-  // ── FIX: Robust share with fallback + visual feedback ──
-  const handleShare = async () => {
-    const text = `I ${survived ? 'survived' : 'perished'} the Titanic with ${(probability * 100).toFixed(1)}% survival probability — Titanic AI`;
-
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        // Fallback for HTTP / older browsers
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.left = '-9999px';
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        const successful = document.execCommand('copy');
-        document.body.removeChild(textarea);
-        if (!successful) throw new Error('execCommand failed');
-      }
-
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      onShare?.();
-    } catch (err) {
-      console.error('Share failed:', err);
-      alert('Could not copy to clipboard. Please copy manually.');
-    }
-  };
-
   return (
     <div className={`bg-white dark:bg-gray-900 rounded-xl shadow-lg overflow-hidden ${className}`}>
       {/* Header */}
@@ -110,33 +74,18 @@ export default function PredictionCard({
           ? 'bg-green-50 dark:bg-green-900/20 border-b border-green-200 dark:border-green-800' 
           : 'bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800'
       }`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={survived ? 'text-green-500' : 'text-red-500'}>
-              {getIcon(survived)}
-            </div>
-            <div>
-              <h3 className={`text-xl font-bold ${getColorClass(survived)}`}>
-                {survived ? 'You Would Survive!' : 'You Would Not Survive'}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Based on your passenger profile
-              </p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className={survived ? 'text-green-500' : 'text-red-500'}>
+            {getIcon(survived)}
           </div>
-
-          {/* ── FIX: Share button with copied state ── */}
-          <button
-            onClick={handleShare}
-            className={`px-3 py-1.5 rounded-lg text-sm transition-all duration-200 flex items-center gap-1.5 ${
-              copied
-                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
-                : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
-            }`}
-          >
-            {copied ? <Check size={16} /> : <Share2 size={16} />}
-            {copied ? 'Copied!' : 'Share'}
-          </button>
+          <div>
+            <h3 className={`text-xl font-bold ${getColorClass(survived)}`}>
+              {survived ? 'You Would Survive!' : 'You Would Not Survive'}
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Based on your passenger profile
+            </p>
+          </div>
         </div>
       </div>
 
