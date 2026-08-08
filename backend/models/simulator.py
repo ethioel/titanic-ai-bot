@@ -1,7 +1,3 @@
-"""
-TitanicSimulator v3 — Immersive narrative emergency simulation.
-Fits into: backend/models/simulator.py
-"""
 from __future__ import annotations
 
 import logging
