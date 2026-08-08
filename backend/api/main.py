@@ -1,7 +1,3 @@
-"""
-FastAPI backend — deploy this to Railway/Render/EC2 separately from Next.js.
-Fits into: backend/api/main.py
-"""
 from __future__ import annotations
 
 import os
