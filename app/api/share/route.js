@@ -14,28 +14,21 @@ export async function GET(request) {
   const verb = survived ? 'SURVIVED' : 'PERISHED';
   const subtitle = pclass ? `${['','1st','2nd','3rd'][parseInt(pclass)]} Class` : 'RMS Titanic Passenger';
 
-  // Deep nautical gradient — no external assets
+  // Premium nautical palette — no images needed
   const bg = survived
-    ? 'linear-gradient(160deg, #0a1f14 0%, #143d28 25%, #1a4d33 50%, #0f2e1d 75%, #0a1f14 100%)'
-    : 'linear-gradient(160deg, #1f0a0a 0%, #3d1414 25%, #4d1a1a 50%, #2e0f0f 75%, #1f0a0a 100%)';
+    ? 'linear-gradient(160deg, #0c2e1c 0%, #164a30 20%, #1e5c3a 40%, #164a30 60%, #0c2e1c 100%)'
+    : 'linear-gradient(160deg, #2a0c0c 0%, #4a1616 20%, #5c1e1e 40%, #4a1616 60%, #2a0c0c 100%)';
 
-  // Decorative stars as simple positioned divs (Satori-compatible)
-  const stars = [
-    { top: 40, left: 80, size: 3, opacity: 0.5 },
-    { top: 80, left: 200, size: 2, opacity: 0.3 },
-    { top: 120, left: 350, size: 4, opacity: 0.4 },
-    { top: 60, left: 500, size: 2, opacity: 0.6 },
-    { top: 150, left: 650, size: 3, opacity: 0.35 },
-    { top: 90, left: 800, size: 2, opacity: 0.5 },
-    { top: 130, left: 950, size: 3, opacity: 0.4 },
-    { top: 50, left: 1100, size: 2, opacity: 0.6 },
-    { top: 100, left: 180, size: 2, opacity: 0.3 },
-    { top: 70, left: 420, size: 3, opacity: 0.45 },
-    { top: 140, left: 580, size: 2, opacity: 0.35 },
-    { top: 110, left: 750, size: 4, opacity: 0.5 },
-    { top: 55, left: 900, size: 2, opacity: 0.4 },
-    { top: 125, left: 1050, size: 3, opacity: 0.3 },
-  ];
+  // Generate deterministic stars based on name so they don't shift
+  const stars = [];
+  const seed = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  for (let i = 0; i < 20; i++) {
+    const x = ((seed * (i + 1) * 137) % 1100) + 50;
+    const y = ((seed * (i + 1) * 293) % 300) + 30;
+    const size = ((seed * (i + 1)) % 3) + 1;
+    const opacity = ((seed * (i + 1) * 0.01) % 0.5) + 0.15;
+    stars.push({ x, y, size, opacity });
+  }
 
   return new ImageResponse(
     (
@@ -54,14 +47,23 @@ export async function GET(request) {
           background: bg,
         }}
       >
-        {/* Stars — rendered as simple white circles */}
+        {/* Noise texture overlay — inline SVG data URI works in Satori */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          opacity: 0.04,
+          backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%270 0 200 200%27 xmlns=%27http://www.w3.org/2000/svg%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.65%27 numOctaves=%273%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27/%3E%3C/svg%3E")',
+          backgroundSize: '200px 200px',
+        }} />
+
+        {/* Stars */}
         {stars.map((s, i) => (
           <div
             key={i}
             style={{
               position: 'absolute',
-              top: s.top,
-              left: s.left,
+              left: s.x,
+              top: s.y,
               width: s.size,
               height: s.size,
               borderRadius: '50%',
@@ -74,25 +76,57 @@ export async function GET(request) {
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.6) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,0.55) 100%)',
         }} />
 
-        {/* Border frame */}
+        {/* Top border line */}
         <div style={{
           position: 'absolute',
-          inset: 24,
-          border: '1.5px solid rgba(255,255,255,0.12)',
-          borderRadius: 10,
+          top: 0,
+          left: '10%',
+          right: '10%',
+          height: 3,
+          background: survived
+            ? 'linear-gradient(90deg, transparent, rgba(34,197,94,0.4), transparent)'
+            : 'linear-gradient(90deg, transparent, rgba(239,68,68,0.4), transparent)',
         }} />
 
-        {/* Top decorative line */}
+        {/* Corner ornaments */}
         <div style={{
           position: 'absolute',
-          top: 55,
-          width: 100,
-          height: 2,
-          background: 'rgba(255,255,255,0.3)',
-          borderRadius: 1,
+          top: 30,
+          left: 30,
+          width: 40,
+          height: 40,
+          borderTop: '2px solid rgba(255,255,255,0.2)',
+          borderLeft: '2px solid rgba(255,255,255,0.2)',
+        }} />
+        <div style={{
+          position: 'absolute',
+          top: 30,
+          right: 30,
+          width: 40,
+          height: 40,
+          borderTop: '2px solid rgba(255,255,255,0.2)',
+          borderRight: '2px solid rgba(255,255,255,0.2)',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: 30,
+          left: 30,
+          width: 40,
+          height: 40,
+          borderBottom: '2px solid rgba(255,255,255,0.2)',
+          borderLeft: '2px solid rgba(255,255,255,0.2)',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: 30,
+          right: 30,
+          width: 40,
+          height: 40,
+          borderBottom: '2px solid rgba(255,255,255,0.2)',
+          borderRight: '2px solid rgba(255,255,255,0.2)',
         }} />
 
         {/* Content */}
@@ -105,12 +139,26 @@ export async function GET(request) {
           width: '100%',
           zIndex: 1,
         }}>
-          <div style={{ fontSize: 84, marginBottom: 18, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.5))' }}>
+          {/* Year badge */}
+          <div style={{
+            fontSize: 13,
+            letterSpacing: '0.25em',
+            textTransform: 'uppercase',
+            opacity: 0.5,
+            marginBottom: 16,
+            border: '1px solid rgba(255,255,255,0.2)',
+            padding: '6px 16px',
+            borderRadius: 20,
+          }}>
+            RMS Titanic · 1912
+          </div>
+
+          <div style={{ fontSize: 88, marginBottom: 20, filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.5))' }}>
             {emoji}
           </div>
 
           <div style={{ 
-            fontSize: 48, 
+            fontSize: 50, 
             fontWeight: 800, 
             letterSpacing: '-0.02em', 
             marginBottom: 10,
@@ -119,37 +167,45 @@ export async function GET(request) {
             {name} {verb}
           </div>
 
-          <div style={{ fontSize: 20, opacity: 0.8, marginBottom: 8, fontWeight: 500, letterSpacing: '0.05em' }}>
+          <div style={{ fontSize: 22, opacity: 0.85, marginBottom: 8, fontWeight: 500 }}>
             {subtitle}
           </div>
 
-          <div style={{ 
-            fontSize: 40, 
-            fontWeight: 700, 
-            marginBottom: 6,
-            textShadow: '0 2px 20px rgba(0,0,0,0.6)',
+          {/* Probability ring */}
+          <div style={{
+            width: 140,
+            height: 140,
+            borderRadius: '50%',
+            border: `4px solid ${survived ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            borderTopColor: survived ? '#22c55e' : '#ef4444',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 32,
+            position: 'relative',
           }}>
-            {(prob * 100).toFixed(1)}%
-          </div>
-          <div style={{ fontSize: 13, opacity: 0.55, marginBottom: 32, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-            Survival Probability
+            <div style={{ fontSize: 36, fontWeight: 800 }}>
+              {(prob * 100).toFixed(0)}%
+            </div>
+            <div style={{ fontSize: 11, opacity: 0.6, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              Probability
+            </div>
           </div>
 
           {twin && (
-            <div style={{ fontSize: 16, opacity: 0.75, fontStyle: 'italic', marginBottom: 24 }}>
-              Historical Twin: {twin}
+            <div style={{ fontSize: 17, opacity: 0.75, fontStyle: 'italic', marginBottom: 24 }}>
+              Twin: {twin}
             </div>
           )}
 
-          {/* Bottom line */}
+          {/* Bottom branding */}
           <div style={{ 
-            fontSize: 13, 
+            fontSize: 14, 
             opacity: 0.45,
-            borderTop: '1px solid rgba(255,255,255,0.18)',
-            paddingTop: 18,
-            width: '40%',
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
+            marginTop: 8,
           }}>
             Titanic AI
           </div>
