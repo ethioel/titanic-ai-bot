@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Download, 
@@ -8,20 +8,10 @@ import {
   Copy, 
   Check, 
   FileText,
-  Loader2
+  Loader2,
+  ImageIcon
 } from 'lucide-react';
 
-/**
- * SurvivalReport — Shareable prediction report.
- * Uses the existing /api/share OG route for image generation (zero deps).
- * 
- * Usage:
- *   <SurvivalReport 
- *     prediction={prediction} 
- *     twin={twinData}
- *     passenger={passengerData}
- *   />
- */
 export default function SurvivalReport({ 
   prediction, 
   twin = null,
@@ -30,6 +20,7 @@ export default function SurvivalReport({
 }) {
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   if (!prediction) {
     return (
@@ -46,7 +37,6 @@ export default function SurvivalReport({
   const probability = typeof prediction.probability === 'number' ? prediction.probability : 0;
   const confidence = typeof prediction.confidence === 'number' ? prediction.confidence : 0;
 
-  // ── Build OG image URL (uses existing /api/share route) ──
   const getOgImageUrl = () => {
     const params = new URLSearchParams({
       survived: String(survived),
@@ -58,17 +48,14 @@ export default function SurvivalReport({
     return `/api/share?${params.toString()}`;
   };
 
-  // ── Download OG image ──
   const handleDownload = async () => {
     try {
       setDownloading(true);
       const url = getOgImageUrl();
-
-      // Fetch the image and trigger download
       const res = await fetch(url);
+      if (!res.ok) throw new Error('Image not available');
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = `titanic-report-${passenger?.name?.replace(/\s+/g, '-').toLowerCase() || 'you'}.png`;
@@ -78,24 +65,15 @@ export default function SurvivalReport({
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Download failed:', err);
-      // Fallback: open in new tab
       window.open(getOgImageUrl(), '_blank');
     } finally {
       setDownloading(false);
     }
   };
 
-  // ── Share text ──
   const buildShareText = () => {
     const url = typeof window !== 'undefined' ? window.location.href : 'https://titanic-ai-bot.vercel.app';
-    return `🚢 Titanic AI Survival Report
-
-${survived ? '✅ I SURVIVED!' : '❌ I DID NOT SURVIVE.'}
-📊 Survival Probability: ${(probability * 100).toFixed(1)}%
-🎯 Model Confidence: ${(confidence * 100).toFixed(0)}%
-${twin?.name ? `👥 Historical Twin: ${twin.name}` : ''}
-
-Test your own odds: ${url}`;
+    return `🚢 Titanic AI Survival Report\n\n${survived ? '✅ I SURVIVED!' : '❌ I DID NOT SURVIVE.'}\n📊 Probability: ${(probability * 100).toFixed(1)}%\n🎯 Confidence: ${(confidence * 100).toFixed(0)}%\n${twin?.name ? `👥 Twin: ${twin.name}` : ''}\n\n${url}`;
   };
 
   const handleCopy = async () => {
@@ -141,15 +119,50 @@ Test your own odds: ${url}`;
 
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* ═══ Report Preview Card ═══ */}
+      {/* ═══ Report Preview ═══ */}
       <div className="relative w-full max-w-md mx-auto overflow-hidden rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700">
-        {/* Background — use OG image as preview! */}
-        <img 
-          src={getOgImageUrl()} 
-          alt="Survival Report" 
-          className="w-full h-auto"
-          loading="lazy"
-        />
+
+        {/* Try OG image first */}
+        {!imgError ? (
+          <img 
+            src={getOgImageUrl()} 
+            alt="Survival Report" 
+            className="w-full h-auto"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          /* ══ CSS Fallback Card ══ */
+          <div 
+            className={`relative w-full aspect-[1200/630] flex flex-col items-center justify-center text-white p-8 ${
+              survived 
+                ? 'bg-gradient-to-br from-emerald-900 via-green-800 to-teal-900'
+                : 'bg-gradient-to-br from-red-900 via-rose-800 to-orange-900'
+            }`}
+          >
+            {/* Subtle noise texture overlay */}
+            <div className="absolute inset-0 opacity-10" style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+            }} />
+
+            <div className="relative z-10 text-center space-y-2">
+              <div className="text-5xl">{survived ? '🛟' : '🌊'}</div>
+              <h2 className="text-2xl font-black tracking-tight">
+                {passenger?.name || 'You'} {survived ? 'SURVIVED' : 'PERISHED'}
+              </h2>
+              <p className="text-sm opacity-80">
+                {['','1st','2nd','3rd'][passenger?.Pclass] || 'RMS Titanic'} Class
+              </p>
+              <div className="text-3xl font-bold">{(probability * 100).toFixed(1)}%</div>
+              <p className="text-xs opacity-60 uppercase tracking-widest">Survival Probability</p>
+              {twin?.name && (
+                <p className="text-xs opacity-70 pt-2 border-t border-white/20">
+                  Twin: {twin.name}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ═══ Action Buttons ═══ */}
@@ -159,11 +172,7 @@ Test your own odds: ${url}`;
           disabled={downloading}
           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-semibold text-sm transition-all active:scale-[0.98]"
         >
-          {downloading ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Download size={16} />
-          )}
+          {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
           {downloading ? 'Downloading...' : 'Download'}
         </button>
 
@@ -186,10 +195,6 @@ Test your own odds: ${url}`;
           {copied ? <Check size={16} /> : <Copy size={16} />}
         </button>
       </div>
-
-      <p className="text-center text-xs text-gray-400 dark:text-gray-500">
-        Downloaded image is generated server-side at <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">/api/share</code>
-      </p>
     </div>
   );
 }
