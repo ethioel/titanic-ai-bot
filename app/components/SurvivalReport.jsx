@@ -24,10 +24,11 @@ export default function SurvivalReport({ prediction, twin, passenger }) {
     const H = 630;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
+    // Internal resolution (high-res for crisp export)
     canvas.width = W * dpr;
     canvas.height = H * dpr;
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
+
+    // DO NOT set canvas.style.width/height here — let CSS control display size
     ctx.scale(dpr, dpr);
 
     const img = new Image();
@@ -49,13 +50,13 @@ export default function SurvivalReport({ prediction, twin, passenger }) {
       // Color overlay
       const grad = ctx.createLinearGradient(0, 0, W, H);
       if (survived) {
-        grad.addColorStop(0, 'rgba(6, 78, 59, 0.85)');
-        grad.addColorStop(0.5, 'rgba(5, 150, 105, 0.70)');
-        grad.addColorStop(1, 'rgba(4, 120, 87, 0.60)');
+        grad.addColorStop(0, 'rgba(6, 78, 59, 0.82)');
+        grad.addColorStop(0.5, 'rgba(5, 150, 105, 0.65)');
+        grad.addColorStop(1, 'rgba(4, 120, 87, 0.50)');
       } else {
-        grad.addColorStop(0, 'rgba(127, 29, 29, 0.85)');
-        grad.addColorStop(0.5, 'rgba(185, 28, 28, 0.70)');
-        grad.addColorStop(1, 'rgba(153, 27, 27, 0.60)');
+        grad.addColorStop(0, 'rgba(127, 29, 29, 0.82)');
+        grad.addColorStop(0.5, 'rgba(185, 28, 28, 0.65)');
+        grad.addColorStop(1, 'rgba(153, 27, 27, 0.50)');
       }
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, W, H);
@@ -63,21 +64,20 @@ export default function SurvivalReport({ prediction, twin, passenger }) {
       // Vignette
       const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.9);
       vig.addColorStop(0, 'rgba(0,0,0,0)');
-      vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+      vig.addColorStop(1, 'rgba(0,0,0,0.50)');
       ctx.fillStyle = vig;
       ctx.fillRect(0, 0, W, H);
 
       // Frame
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.20)';
       ctx.lineWidth = 3;
       ctx.strokeRect(28, 28, W - 56, H - 56);
 
       // Top badge
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.beginPath();
-      ctx.roundRect(W / 2 - 150, 52, 300, 34, 17);
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      roundRect(ctx, W / 2 - 150, 52, 300, 34, 17);
       ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.font = '600 13px Inter, system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(`RMS TITANIC · 1912 · ${classLabel.toUpperCase()}`, W / 2, 74);
@@ -88,25 +88,26 @@ export default function SurvivalReport({ prediction, twin, passenger }) {
 
       // Name + verb
       ctx.fillStyle = '#ffffff';
-      ctx.font = '800 46px Inter, system-ui, sans-serif';
+      ctx.font = '800 44px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
       ctx.fillText(`${name} ${survived ? 'SURVIVED' : 'PERISHED'}`, W / 2, 240);
 
       // Subtitle
       ctx.font = '500 18px Inter, system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillStyle = 'rgba(255,255,255,0.70)';
       ctx.fillText(`${classLabel} Passenger`, W / 2, 272);
 
       // Probability ring background
       ctx.beginPath();
-      ctx.arc(W / 2, 370, 68, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.arc(W / 2, 370, 65, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
       ctx.lineWidth = 10;
       ctx.stroke();
 
       // Probability ring fill
       const pct = Math.min(Math.max(probability, 0), 1);
       ctx.beginPath();
-      ctx.arc(W / 2, 370, 68, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * pct));
+      ctx.arc(W / 2, 370, 65, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * pct));
       ctx.strokeStyle = survived ? '#34d399' : '#f87171';
       ctx.lineWidth = 10;
       ctx.lineCap = 'round';
@@ -114,29 +115,28 @@ export default function SurvivalReport({ prediction, twin, passenger }) {
 
       // Probability text
       ctx.fillStyle = '#ffffff';
-      ctx.font = '700 34px Inter, system-ui, sans-serif';
+      ctx.font = '700 32px Inter, system-ui, sans-serif';
       ctx.fillText(`${(pct * 100).toFixed(1)}%`, W / 2, 378);
       ctx.font = '500 13px Inter, system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.fillStyle = 'rgba(255,255,255,0.60)';
       ctx.fillText('SURVIVAL PROBABILITY', W / 2, 402);
 
       // Twin
       if (twinName) {
-        ctx.fillStyle = 'rgba(255,255,255,0.80)';
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
         ctx.font = 'italic 16px Inter, system-ui, sans-serif';
-        ctx.fillText(`Historical Twin: ${twinName}`, W / 2, 460);
+        ctx.fillText(`Historical Twin: ${twinName}`, W / 2, 455);
       }
 
       // Footer
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.fillStyle = 'rgba(255,255,255,0.40)';
       ctx.font = '500 13px Inter, system-ui, sans-serif';
-      ctx.fillText('titanic-ai-bot.vercel.app', W / 2, 560);
+      ctx.fillText('titanic-ai-bot.vercel.app', W / 2, 565);
 
       setIsReady(true);
     };
 
     img.onerror = () => {
-      // Fallback gradient if image missing
       const grad = ctx.createLinearGradient(0, 0, W, H);
       if (survived) {
         grad.addColorStop(0, '#064e3b'); grad.addColorStop(1, '#065f46');
@@ -205,9 +205,16 @@ export default function SurvivalReport({ prediction, twin, passenger }) {
         Survival Report Card
       </h3>
 
-      <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-lg mx-auto" style={{ maxWidth: 600 }}>
+      {/* Container: max-width reduced to 480px so it fits nicely */}
+      <div 
+        className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-lg mx-auto"
+        style={{ maxWidth: 480 }}
+      >
         {!isReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 z-10">
+          <div 
+            className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 z-10"
+            style={{ aspectRatio: '1200/630' }}
+          >
             <Loader2 className="animate-spin text-slate-400" size={32} />
           </div>
         )}
@@ -246,4 +253,18 @@ export default function SurvivalReport({ prediction, twin, passenger }) {
       </div>
     </div>
   );
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
