@@ -344,10 +344,8 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className="max-w-3xl mx-auto space-y-6"
             >
-              {/* Prediction result card — NO share button here */}
               <PredictionCard prediction={prediction} />
 
-              {/* Voice Narrator */}
               <div className="flex justify-center">
                 <VoiceNarrator 
                   text={`You ${prediction.survived ? 'survived' : 'did not survive'} the Titanic with ${(prediction.probability * 100).toFixed(1)} percent probability. ${prediction.survived ? 'Congratulations, you made it to a lifeboat.' : 'Unfortunately, the odds were not in your favor.'}`}
@@ -355,7 +353,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* Survival Report — this is the ONLY share UI */}
               <SurvivalReport 
                 prediction={prediction}
                 twin={twin}
@@ -364,7 +361,10 @@ export default function Home() {
 
               <div className="flex flex-col sm:flex-row justify-center gap-3">
                 <button 
-                  onClick={() => setActiveTab('twin')} 
+                  onClick={() => {
+                    setActiveTab('twin');
+                    if (passengerData && !twin) handleFindTwin(passengerData);
+                  }} 
                   className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
                   Find Historical Twin
@@ -407,10 +407,13 @@ export default function Home() {
                   loading={loading.twin}
                 />
 
-                <WikipediaPreview 
-                  name={twin?.name || passengerData?.name} 
-                  className="mt-2"
-                />
+                {/* Only show Wikipedia when we have an actual twin name */}
+                {twin?.name && (
+                  <WikipediaPreview 
+                    name={twin.name} 
+                    className="mt-2"
+                  />
+                )}
 
                 {twin?.narrative && (
                   <div className="flex justify-center pt-2">
